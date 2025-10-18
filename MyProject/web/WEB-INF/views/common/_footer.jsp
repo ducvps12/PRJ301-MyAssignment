@@ -1,5 +1,5 @@
 <footer class="app-footer">
-  <div>© <fmt:formatDate value="<%= new java.util.Date() %>" pattern="yyyy"/> LeaveMgmt — Admin Console</div>
+  <div>© <fmt:formatDate value="<%= new java.util.Date() %>" pattern="yyyy"/> LeaveMgmt  Admin Console</div>
 </footer>
 <style>
   .app-footer{margin-top:24px;padding:16px;text-align:center;color:var(--muted)}
