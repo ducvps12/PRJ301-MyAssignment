@@ -9,11 +9,12 @@ import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.*;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@WebServlet(name="AgendaServlet", urlPatterns={"/request/agenda"})
+@WebServlet(name = "AgendaServlet", urlPatterns = {"/request/agenda"})
 public class AgendaServlet extends HttpServlet {
     private final RequestDAO dao = new RequestDAO();
 
@@ -28,37 +29,47 @@ public class AgendaServlet extends HttpServlet {
         }
         String dept = (String) s.getAttribute("department");
 
-        // Range: mặc định tuần hiện tại [Mon..Sun]
+        // Mặc định tuần hiện tại [Mon..Sun]
         LocalDate today = LocalDate.now();
         LocalDate monday = today.with(DayOfWeek.MONDAY);
         LocalDate sunday = monday.plusDays(6);
 
-        LocalDate from = Optional.ofNullable(req.getParameter("from"))
-                .map(LocalDate::parse).orElse(monday);
-        LocalDate to = Optional.ofNullable(req.getParameter("to"))
-                .map(LocalDate::parse).orElse(sunday);
+        // Parse tham số (an toàn với format sai)
+        LocalDate from = parseOrDefault(req.getParameter("from"), monday);
+        LocalDate to   = parseOrDefault(req.getParameter("to"),   sunday);
 
-        if (to.isBefore(from)) to = from;
+        // Quan trọng: dùng biến final/eff-final cho lambda
+        final LocalDate start = from;
+        final LocalDate end   = (to.isBefore(from)) ? from : to;
 
-        // Danh sách ngày [from..to]
-        List<LocalDate> days = Stream.iterate(from, d -> !d.isAfter(to), d -> d.plusDays(1))
-                .collect(Collectors.toList());
+        // Danh sách ngày [start..end]
+        List<LocalDate> days = Stream.iterate(start, d -> !d.isAfter(end), d -> d.plusDays(1))
+                                     .collect(Collectors.toList());
 
         try {
             List<User> users = dao.listUsersByDepartment(dept);
-            // có thể sort để đẹp hơn
             users.sort(Comparator.comparing(User::getFullName, String.CASE_INSENSITIVE_ORDER));
 
-            Map<Integer, Set<LocalDate>> absent = dao.getApprovedAbsences(dept, from, to);
+            Map<Integer, Set<LocalDate>> absent = dao.getApprovedAbsences(dept, start, end);
 
             req.setAttribute("users", users);
             req.setAttribute("absent", absent);
-            req.setAttribute("from", from);
-            req.setAttribute("to", to);
+            req.setAttribute("from", start);
+            req.setAttribute("to", end);
             req.setAttribute("days", days);
+
             req.getRequestDispatcher("/WEB-INF/views/request/agenda.jsp").forward(req, resp);
         } catch (SQLException e) {
             throw new ServletException(e);
+        }
+    }
+
+    private static LocalDate parseOrDefault(String val, LocalDate def) {
+        if (val == null || val.isBlank()) return def;
+        try {
+            return LocalDate.parse(val); // ISO-8601: yyyy-MM-dd
+        } catch (DateTimeParseException ex) {
+            return def;
         }
     }
 }

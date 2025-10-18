@@ -1,6 +1,9 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ taglib prefix="c"  uri="http://java.sun.com/jsp/jstl/core" %>
 <%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -107,26 +110,34 @@
       </tr>
       </thead>
       <tbody>
-      <c:forEach var="u" items="${users}">
-        <tr data-user="${fn:toLowerCase(u.fullName)}">
-          <td class="col-name">
-            ${u.fullName}
-            <span class="muted">(#${u.userId})</span>
-          </td>
-          <c:forEach var="d" items="${days}">
-            <c:set var="isAbsent"
-                   value="${absent[u.userId] != null && absent[u.userId].contains(d)}"/>
-            <td class="${d.dayOfWeek.value >= 6 ? 'weekend' : ''}"
-                data-absent="${isAbsent ? 1 : 0}"
-                title="<fmt:formatDate value='${java.sql.Date.valueOf(d)}' pattern='dd/MM/yyyy'/>">
-              <c:choose>
-                <c:when test="${isAbsent}"><span class="no">❌</span></c:when>
-                <c:otherwise><span class="ok">✅</span></c:otherwise>
-              </c:choose>
-            </td>
-          </c:forEach>
-        </tr>
-      </c:forEach>
+
+
+    <c:forEach var="u" items="${users}">
+  <tr data-user="${fn:toLowerCase(u.fullName)}">
+    <td class="col-name">
+      ${u.fullName}
+      <c:set var="uid" value="${u.id}" />
+      <span class="muted"><c:if test="${not empty uid}">(#${uid})</c:if></span>
+    </td>
+
+    <c:forEach var="d" items="${days}">
+      <c:set var="isAbsent"
+             value="${absent[uid] != null and absent[uid].contains(d)}"/>
+      <td class="${d.dayOfWeek.value >= 6 ? 'weekend' : ''}"
+          data-absent="${isAbsent ? 1 : 0}"
+          title="<fmt:formatDate value='${java.sql.Date.valueOf(d)}' pattern='dd/MM/yyyy'/>">
+        <c:choose>
+          <c:when test="${isAbsent}"><span class="no">❌</span></c:when>
+          <c:otherwise><span class="ok">✅</span></c:otherwise>
+        </c:choose>
+      </td>
+    </c:forEach>
+  </tr>
+</c:forEach>
+
+
+
+
       </tbody>
       <tfoot>
       <tr>
@@ -246,7 +257,10 @@
       const arr = visibleIdx.map(i=>{
         const c = tr.cells[i];
         const t = c ? c.innerText.trim() : "";
-        return `"${t.replace(/"/g,'""')}"`;
+return '"' + t.replace(/"/g, '""') + '"';
+
+
+
       });
       rows.push(arr.join(","));
     });
