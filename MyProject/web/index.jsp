@@ -17,42 +17,106 @@
   <meta charset="UTF-8">
   <title>Leave Management – Landing</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
 
   <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
   <style>
+    /* ---------------- Core palette + Bootstrap mapping --------------- */
     :root{
-      --bg:#f6f8fb;--card:#ffffff;--text:#212529;--muted:#6c757d;
-      --brand:#0d6efd;--ring:rgba(13,110,253,.2);--shadow:0 10px 25px rgba(13,110,253,.08);
-      --border:#e9ecef;--hero-l:#eef4ff;--hero-r:#ecfff9;--accent:#6610f2;
+      /* App tokens */
+      --bg:#f6f8fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280;
+      --brand:#0d6efd; --accent:#6610f2; --ring:rgba(13,110,253,.25);
+      --border:#e5e7eb; --hero-l:#eef4ff; --hero-r:#ecfff9;
+      --shadow:0 10px 25px rgba(13,110,253,.08);
+
+      /* Bootstrap tokens */
+      --bs-body-bg: var(--bg);
+      --bs-body-color: var(--text);
+      --bs-border-color: var(--border);
+      --bs-link-color: var(--brand);
+      --bs-link-hover-color: #0b5ed7;
+      --bs-heading-color: var(--text);
+      --bs-card-bg: var(--card);
+      --bs-card-color: var(--text);
     }
     [data-theme="dark"]{
-      --bg:#0f1320;--card:#12172a;--text:#dee2e6;--muted:#9aa3b2;
-      --brand:#66a2ff;--ring:rgba(102,162,255,.25);--shadow:0 10px 25px rgba(0,0,0,.35);
-      --border:#1e2438;--hero-l:#0b1222;--hero-r:#0c1e1b;--accent:#b693ff;
+      --bg:#0f1320; --card:#12172a; --text:#e5e7eb; --muted:#9aa3b2;
+      --brand:#66a2ff; --accent:#b693ff; --ring:rgba(102,162,255,.3);
+      --border:#1e2438; --hero-l:#0b1222; --hero-r:#0c1e1b;
+      --shadow:0 14px 34px rgba(0,0,0,.45);
+
+      --bs-body-bg: var(--bg);
+      --bs-body-color: var(--text);
+      --bs-border-color: var(--border);
+      --bs-link-color: var(--brand);
+      --bs-link-hover-color: #8ab8ff;
+      --bs-heading-color: var(--text);
+      --bs-card-bg: var(--card);
+      --bs-card-color: var(--text);
     }
-    html,body{background:var(--bg); color:var(--text)}
+
+    html,body{background:var(--bs-body-bg);color:var(--bs-body-color)}
     .navbar{backdrop-filter:saturate(1.2) blur(4px);}
-    .brand-grad{background:linear-gradient(90deg,var(--brand),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
-    .hero{background:radial-gradient(1200px 600px at 0% 0%,var(--hero-l) 0,transparent 60%),radial-gradient(1200px 600px at 100% 0%,var(--hero-r) 0,transparent 60%);border-bottom:1px solid var(--border);}
-    .card{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);}
-    .card.hover{transition:transform .18s ease,box-shadow .18s ease;}
-    .card.hover:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(13,110,253,.18);}
+    .brand-grad{
+      background:linear-gradient(90deg,var(--brand),var(--accent));
+      -webkit-background-clip:text;background-clip:text;color:transparent
+    }
+    .hero{
+      background:
+        radial-gradient(1200px 600px at 0% 0%,var(--hero-l) 0,transparent 60%),
+        radial-gradient(1200px 600px at 100% 0%,var(--hero-r) 0,transparent 60%);
+      border-bottom:1px solid var(--bs-border-color);
+    }
+
+    .card{background:var(--bs-card-bg);border:1px solid var(--bs-border-color);box-shadow:var(--shadow);}
+    .hover{transition:transform .18s ease,box-shadow .18s ease;}
+    .hover:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(13,110,253,.18);}
+    [data-theme="dark"] .hover:hover{box-shadow:0 24px 56px rgba(0,0,0,.55);}
+
     .quick{min-height:120px;display:flex;align-items:center;padding:18px 20px}
-    .kbd{border:1px solid var(--border);border-bottom-width:2px;padding:.2rem .45rem;border-radius:.35rem;background:var(--card)}
+    .kbd{border:1px solid var(--bs-border-color);border-bottom-width:2px;padding:.2rem .45rem;border-radius:.35rem;background:var(--card);color:var(--text)}
     .legend-dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:.4rem;}
     .dot-green{background:#15c26b;animation:pulseG 1.6s infinite ease-in-out;}
     .dot-red{background:#e55353;animation:pulseR 1.6s infinite ease-in-out;}
     @keyframes pulseG{0%{opacity:.6;transform:scale(.9)}50%{opacity:1;transform:scale(1.3)}100%{opacity:.6;transform:scale(.9)}}
     @keyframes pulseR{0%{opacity:.7;transform:scale(.9)}50%{opacity:1;transform:scale(1.25)}100%{opacity:.7;transform:scale(.9)}}
-    .status-badge{padding:.25rem .5rem;border-radius:999px;border:1px solid var(--border);font-weight:600;display:flex;align-items:center;gap:.3rem;}
+    .status-badge{padding:.25rem .5rem;border-radius:999px;border:1px solid var(--bs-border-color);font-weight:600;display:flex;align-items:center;gap:.3rem;}
+    .mini-muted{font-size:.95rem;color:var(--muted)}
+    .divider{height:1px;background:var(--bs-border-color);margin:1.2rem 0}
+    .pill{border-radius:999px;padding:.25rem .6rem;border:1px solid var(--bs-border-color);}
+
     .fade-in{animation:fade .35s ease both}@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-    .mini-muted{font-size:.9rem;color:var(--muted)}
-    .divider{height:1px;background:var(--border);margin:1.2rem 0}
-    .pill{border-radius:999px;padding:.25rem .6rem;border:1px solid var(--border);}
-    .status-floating{position:fixed;bottom:16px;right:16px;z-index:9999;background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:999px;padding:.4rem .9rem;font-size:.9rem;}
+    .status-floating{position:fixed;bottom:16px;right:16px;z-index:9999;background:var(--card);border:1px solid var(--bs-border-color);box-shadow:var(--shadow);border-radius:999px;padding:.4rem .9rem;font-size:.9rem;}
+
+    /* Focus ring đẹp + accessible */
+    .ring{transition:box-shadow .15s ease, transform .05s}
+    .ring:focus-visible{outline:0;box-shadow:0 0 0 .2rem var(--ring)}
+    .btn:active{transform:translateY(1px)}
+
+    /* -------- Bootstrap utility dark-safe overrides -------- */
+    [data-theme="dark"] .bg-light{background-color:var(--card)!important}
+    [data-theme="dark"] .text-dark{color:var(--bs-body-color)!important}
+    [data-theme="dark"] .btn-outline-secondary{
+      color:var(--bs-body-color);border-color:var(--bs-border-color);background:transparent
+    }
+    [data-theme="dark"] .btn-outline-secondary:hover{
+      background:rgba(255,255,255,.06);border-color:#3a4a6b;color:var(--bs-body-color)
+    }
+    [data-theme="dark"] .btn-outline-primary{color:var(--brand);border-color:var(--brand)}
+    [data-theme="dark"] .btn-outline-primary:hover{background:rgba(102,162,255,.12)}
+
+    /* Keyboard help modal */
+    .kbd-modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.45);z-index:1050;padding:16px}
+    .kbd-modal.open{display:grid}
+    .kbd-sheet{max-width:520px;width:100%;background:var(--card);border:1px solid var(--bs-border-color);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+    .kbd-sheet h5{margin:0 0 8px}
+    .kbd-sheet li{margin:.2rem 0}
+    /* Toast */
+    .toast-lite{position:fixed;right:14px;bottom:14px;display:none;background:#111827;color:#fff;padding:10px 12px;border-radius:10px;box-shadow:var(--shadow);font-size:13px}
+    .toast-lite.show{display:block}
   </style>
 </head>
 <body class="fade-in">
@@ -61,9 +125,9 @@
 <nav class="navbar navbar-expand-lg sticky-top border-bottom" style="background:var(--card)">
   <div class="container">
     <a class="navbar-brand fw-bold brand-grad" href="${pageContext.request.contextPath}/">LeaveMgmt</a>
-    <div class="d-flex align-items-center gap-2 ms-auto">
 
-      <!-- ✅ DB status badge -->
+    <div class="d-flex align-items-center gap-2 ms-auto">
+      <!-- DB status -->
       <c:choose>
         <c:when test="${requestScope.dbOK}">
           <span class="status-badge mini-muted" title="Database connected">
@@ -79,7 +143,7 @@
       </c:choose>
 
       <button id="themeToggle" class="btn btn-sm btn-outline-secondary ring" title="Dark/Light (D)">
-        <i class="bi bi-moon-stars"></i>
+        <i id="themeIcon" class="bi bi-moon-stars"></i>
       </button>
 
       <c:choose>
@@ -101,9 +165,10 @@
     <div class="row g-4 align-items-center">
       <div class="col-lg-7">
         <h1 class="display-5 fw-bold mb-3">Quản lý <span class="brand-grad">đơn xin nghỉ</span> nhanh – gọn – đúng quy trình</h1>
-        <p class="lead mini-muted mb-4">Flow demo chuẩn: <strong>Create → List → Review</strong>. RBAC 3 vai trò (Employee/Manager/Division Leader).</p>
+        <p class="lead mini-muted mb-4">Flow demo chuẩn: <strong>Create → List → Review</strong>. RBAC 3 vai trò (Employee / Manager / Division Leader).</p>
+
         <c:if test="${not empty sessionScope.user}">
-          <div class="alert" style="background:var(--card);border:1px solid var(--border)">
+          <div class="alert" style="background:var(--card);border:1px solid var(--bs-border-color)">
             Xin chào, <strong>${sessionScope.user.fullName}</strong>
             <c:if test="${sessionScope.isManager}"> · <span class="pill">MANAGER</span></c:if>
             <c:if test="${sessionScope.isDivisionLeader}"> · <span class="pill">DIVISION LEADER</span></c:if>
@@ -121,7 +186,7 @@
               <a class="btn btn-lg btn-outline-secondary ring" href="${pageContext.request.contextPath}/request/list?scope=mine"><i class="bi bi-list-ul me-1"></i>Đơn của tôi</a>
             </c:otherwise>
           </c:choose>
-          <a class="btn btn-lg btn-outline-primary ring" href="#help"><i class="bi bi-mortarboard me-1"></i>Hướng dẫn</a>
+          <button class="btn btn-lg btn-outline-primary ring" id="openKbd"><i class="bi bi-keyboard me-1"></i>Phím tắt</button>
         </div>
       </div>
 
@@ -146,7 +211,7 @@
   </div>
 </section>
 
-<!-- QUICK + DEMO ACCOUNTS -->
+<!-- QUICK -->
 <section id="quick" class="py-5">
   <div class="container">
     <div class="d-flex align-items-center justify-content-between mb-3">
@@ -171,7 +236,7 @@
       <div class="col-lg-7">
         <div class="card p-3 hover">
           <div class="card-body">
-            <h5 class="card-title mb-3" id="help"><i class="bi bi-info-circle"></i> Mẹo sử dụng</h5>
+            <h5 class="card-title mb-3"><i class="bi bi-info-circle"></i> Mẹo sử dụng</h5>
             <ul class="mb-0">
               <li>Trạng thái ban đầu là <b>Inprogress</b>.</li>
               <li>Chỉ quản lý/cấp phòng mới được duyệt đơn.</li>
@@ -188,6 +253,7 @@
               <div><div class="fw-semibold">Employee</div><div class="mini-muted">user: <code>emp_e</code><br>pass: <code>123456</code></div></div>
               <div><div class="fw-semibold">Manager</div><div class="mini-muted">user: <code>manager_it</code><br>pass: <code>123456</code></div></div>
             </div>
+            <button id="copyDemo" class="btn btn-sm btn-outline-primary mt-3 ring"><i class="bi bi-clipboard"></i> Sao chép tài khoản demo</button>
           </div>
         </div>
       </div>
@@ -198,7 +264,7 @@
 <footer class="py-4 border-top">
   <div class="container d-flex flex-wrap justify-content-between">
     <span>© <fmt:formatDate value="<%=new java.util.Date()%>" pattern="yyyy"/> LeaveMgmt</span>
-    <span class="mini-muted">FALL 2025 · JSP/Servlet + JDBC · v1.2</span>
+    <span class="mini-muted">FALL 2025 · JSP/Servlet + JDBC · v1.3</span>
   </div>
 </footer>
 
@@ -207,14 +273,131 @@
   <div class="status-floating"><span class="legend-dot dot-red"></span> Database disconnected</div>
 </c:if>
 
+<!-- Keyboard Help Modal -->
+<div id="kbdModal" class="kbd-modal" role="dialog" aria-modal="true" aria-labelledby="kbdTitle">
+  <div class="kbd-sheet">
+    <h5 id="kbdTitle"><i class="bi bi-keyboard"></i> Phím tắt</h5>
+    <ul class="mb-3">
+      <li><span class="kbd">D</span> — Bật/tắt Dark mode</li>
+      <li><span class="kbd">G</span> + <span class="kbd">C</span> — Mở Tạo đơn</li>
+      <li><span class="kbd">G</span> + <span class="kbd">M</span> — Đơn của tôi</li>
+      <li><span class="kbd">G</span> + <span class="kbd">T</span> — Đơn cấp dưới</li>
+      <li><span class="kbd">?</span> — Mở bảng này</li>
+    </ul>
+    <div class="d-flex gap-2">
+      <button id="closeKbd" class="btn btn-secondary ring">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast-lite"></div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  const root=document.documentElement,themeToggle=document.getElementById('themeToggle');
-  const saved=localStorage.getItem('theme');if(saved)root.setAttribute('data-theme',saved);
-  themeToggle?.addEventListener('click',()=>{const c=root.getAttribute('data-theme')||'light';const n=c==='light'?'dark':'light';root.setAttribute('data-theme',n);localStorage.setItem('theme',n);});
-  document.addEventListener('keydown',e=>{const ctx='<%=request.getContextPath()%>';if(e.key.toLowerCase()==='d'&&!e.ctrlKey&&!e.metaKey)themeToggle?.click();
-  if(e.key.toLowerCase()==='g'){window.__goPressed=true;return;}
-  if(window.__goPressed){if(e.key.toLowerCase()==='c')location.href=ctx+'/request/create';if(e.key.toLowerCase()==='m')location.href=ctx+'/request/list?scope=mine';if(e.key.toLowerCase()==='t')location.href=ctx+'/request/list?scope=team';window.__goPressed=false;}});
+  (function(){
+    const root = document.documentElement;
+    const icon = document.getElementById('themeIcon');
+    const toggleBtn = document.getElementById('themeToggle');
+    const toast = document.getElementById('toast');
+    const ctx = '<%=request.getContextPath()%>';
+
+    // ---------- Theme boot: prefer saved, else system ----------
+    const saved = localStorage.getItem('theme');
+    if(saved){ root.setAttribute('data-theme', saved); }
+    else{
+      try{
+        if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+          root.setAttribute('data-theme', 'dark');
+        }
+      }catch(_){}
+    }
+    syncThemeIcon();
+
+    function showToast(msg, ms){
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(function(){ toast.classList.remove('show'); }, ms || 1600);
+    }
+    function currentTheme(){ return root.getAttribute('data-theme') || 'light'; }
+    function setTheme(next){
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      syncThemeIcon();
+      showToast('Đã chuyển sang giao diện ' + (next==='dark'?'tối':'sáng') + '.');
+    }
+    function syncThemeIcon(){
+      if(!icon) return;
+      var isDark = currentTheme()==='dark';
+      icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
+      toggleBtn.setAttribute('aria-label', isDark ? 'Chuyển sang Light' : 'Chuyển sang Dark');
+    }
+
+    toggleBtn && toggleBtn.addEventListener('click', function(){
+      var next = currentTheme()==='light' ? 'dark' : 'light';
+      setTheme(next);
+    });
+
+    // ---------- Keyboard shortcuts ----------
+    var goHeld = false;
+    document.addEventListener('keydown', function(e){
+      var k = (e.key || '').toLowerCase();
+      if(k==='d' && !e.ctrlKey && !e.metaKey){
+        // theme
+        e.preventDefault();
+        toggleBtn && toggleBtn.click();
+        return;
+      }
+      if(k==='?'){
+        e.preventDefault();
+        openKbd();
+        return;
+      }
+      if(k==='g'){ goHeld = true; return; }
+      if(goHeld){
+        if(k==='c'){ location.href = ctx + '/request/create'; }
+        if(k==='m'){ location.href = ctx + '/request/list?scope=mine'; }
+        if(k==='t'){ location.href = ctx + '/request/list?scope=team'; }
+        goHeld = false;
+      }
+    });
+    document.addEventListener('keyup', function(e){
+      if((e.key||'').toLowerCase()==='g') goHeld = false;
+    });
+
+    // ---------- Keyboard help modal ----------
+    var kbdModal = document.getElementById('kbdModal');
+    var openBtn = document.getElementById('openKbd');
+    var closeBtn = document.getElementById('closeKbd');
+    function openKbd(){ kbdModal.classList.add('open'); }
+    function closeKbd(){ kbdModal.classList.remove('open'); }
+    openBtn && openBtn.addEventListener('click', openKbd);
+    closeBtn && closeBtn.addEventListener('click', closeKbd);
+    kbdModal && kbdModal.addEventListener('click', function(ev){ if(ev.target===kbdModal) closeKbd(); });
+
+    // ---------- Copy demo accounts ----------
+    var copyBtn = document.getElementById('copyDemo');
+    copyBtn && copyBtn.addEventListener('click', function(){
+      var txt = 'Employee\\nuser: emp_e\\npass: 123456\\n\\nManager\\nuser: manager_it\\npass: 123456';
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(function(){ showToast('Đã sao chép thông tin demo.'); });
+      }else{
+        // Fallback
+        var ta = document.createElement('textarea');
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand('copy'); showToast('Đã sao chép thông tin demo.'); }catch(_){}
+        document.body.removeChild(ta);
+      }
+    });
+
+    // ---------- Respect reduced motion ----------
+    try{
+      if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+        var styles = document.createElement('style');
+        styles.textContent = '.fade-in, .hover{animation:none!important;transition:none!important}';
+        document.head.appendChild(styles);
+      }
+    }catch(_){}
+  })();
 </script>
 </body>
 </html>

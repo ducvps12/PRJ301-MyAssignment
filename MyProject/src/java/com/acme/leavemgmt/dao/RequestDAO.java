@@ -736,6 +736,223 @@ public void createRequest(Request r) throws SQLException {
         return updateDecisionWithHistory(requestId, managerId, managerName, note, "REJECTED", sqlV0, sqlV2);
     }
 
+     public int duplicate(int id, int newOwnerId) throws SQLException{
+        final String sql = """
+            INSERT INTO Requests(title,reason,start_date,end_date,status,created_by)
+            SELECT title, reason, start_date, end_date, 'PENDING', ?
+              FROM Requests WHERE id=?
+            """;
+        try(Connection c = DBConnection.getConnection();
+            PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+            ps.setInt(1, newOwnerId);
+            ps.setInt(2, id);
+            ps.executeUpdate();
+            try(ResultSet rs = ps.getGeneratedKeys()){
+                if(rs.next()) return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    public int bulkUpdate(List<Integer> ids, String action, int managerId, String note) throws SQLException{
+        if (ids==null || ids.isEmpty()) return 0;
+        String newStatus = switch (action) {
+            case "approve" -> "APPROVED";
+            case "reject"  -> "REJECTED";
+            case "cancel"  -> "CANCELLED";
+            default -> null;
+        };
+        if (newStatus == null) return 0;
+        String in = "?,".repeat(ids.size());
+        in = in.substring(0, in.length()-1);
+        String sql = "UPDATE Requests SET status=?, processed_by=?, manager_note=? WHERE status='PENDING' AND id IN ("+in+")";
+        try(Connection c = DBConnection.getConnection();
+            PreparedStatement ps = c.prepareStatement(sql)){
+            int idx=1;
+            ps.setString(idx++, newStatus);
+            ps.setInt(idx++, managerId);
+            ps.setString(idx++, note);
+            for(Integer id: ids) ps.setInt(idx++, id);
+            return ps.executeUpdate();
+        }
+    }
+
+    // ====== LIST + COUNT with filters ======
+
+    public List<Request> findPage(Integer userId, boolean onlyMine, boolean teamOfManager,
+                                  LocalDate from, LocalDate to, String status, String keyword,
+                                  String sort, int page, int pageSize) throws SQLException {
+        StringBuilder sql = new StringBuilder("""
+            SELECT r.id, r.title, r.reason, r.start_date, r.end_date, r.status,
+                   r.created_by, u1.full_name AS created_by_name,
+                   r.processed_by, u2.full_name AS processed_by_name,
+                   r.manager_note
+              FROM Requests r
+              JOIN Users u1 ON u1.id = r.created_by
+              LEFT JOIN Users u2 ON u2.id = r.processed_by
+             WHERE 1=1
+            """);
+        List<Object> params = new ArrayList<>();
+
+        // scope
+        if (onlyMine && userId != null){
+            sql.append(" AND r.created_by = ? ");
+            params.add(userId);
+        } else if (teamOfManager && userId != null){
+            // Giả sử Users.department: lấy tất cả user cùng department của manager trừ manager
+            sql.append("""
+                AND u1.department IN (
+                    SELECT u.department FROM Users u WHERE u.id = ?
+                )
+                """);
+            params.add(userId);
+        }
+
+        // filters
+        if (from != null){ sql.append(" AND r.start_date >= ? "); params.add(from); }
+        if (to   != null){ sql.append(" AND r.end_date   <= ? "); params.add(to); }
+        if (status != null && !status.isBlank()){
+            sql.append(" AND r.status = ? "); params.add(status.toUpperCase());
+        }
+        if (keyword != null && !keyword.isBlank()){
+            sql.append(" AND (r.title LIKE ? OR r.reason LIKE ? OR u1.full_name LIKE ?) ");
+            String k = "%"+keyword.trim()+"%";
+            params.add(k); params.add(k); params.add(k);
+        }
+
+        // sort
+        String order = switch (sort==null?"":sort) {
+            case "created_asc"  -> " r.id ASC ";
+            case "created_desc" -> " r.id DESC ";
+            case "from_asc"     -> " r.start_date ASC, r.id DESC ";
+            case "from_desc"    -> " r.start_date DESC, r.id DESC ";
+            default             -> " r.id DESC ";
+        };
+        sql.append(" ORDER BY ").append(order);
+        sql.append(" OFFSET ? ROWS FETCH NEXT ? ROWS ONLY ");
+        int offset = Math.max(0, (page-1)*pageSize);
+
+        try(Connection c = DBConnection.getConnection();
+            PreparedStatement ps = c.prepareStatement(sql.toString())){
+            int i=1;
+            for(Object p: params) ps.setObject(i++, p);
+            ps.setInt(i++, offset);
+            ps.setInt(i, pageSize);
+            try(ResultSet rs = ps.executeQuery()){
+                List<Request> out = new ArrayList<>();
+                while(rs.next()) out.add(map(rs));
+                return out;
+            }
+        }
+    }
+
+    public int count(Integer userId, boolean onlyMine, boolean teamOfManager,
+                     LocalDate from, LocalDate to, String status, String keyword) throws SQLException {
+        StringBuilder sql = new StringBuilder("""
+            SELECT COUNT(1)
+              FROM Requests r
+              JOIN Users u1 ON u1.id = r.created_by
+             WHERE 1=1
+            """);
+        List<Object> params = new ArrayList<>();
+
+        if (onlyMine && userId != null){
+            sql.append(" AND r.created_by = ? "); params.add(userId);
+        } else if (teamOfManager && userId != null){
+            sql.append("""
+                AND u1.department IN (
+                    SELECT u.department FROM Users u WHERE u.id = ?
+                )
+                """);
+            params.add(userId);
+        }
+        if (from != null){ sql.append(" AND r.start_date >= ? "); params.add(from); }
+        if (to   != null){ sql.append(" AND r.end_date   <= ? "); params.add(to); }
+        if (status != null && !status.isBlank()){
+            sql.append(" AND r.status = ? "); params.add(status.toUpperCase());
+        }
+        if (keyword != null && !keyword.isBlank()){
+            sql.append(" AND (r.title LIKE ? OR r.reason LIKE ? OR u1.full_name LIKE ?) ");
+            String k = "%"+keyword.trim()+"%";
+            params.add(k); params.add(k); params.add(k);
+        }
+
+        try(Connection c = DBConnection.getConnection();
+            PreparedStatement ps = c.prepareStatement(sql.toString())){
+            int i=1; for(Object p: params) ps.setObject(i++, p);
+            try(ResultSet rs = ps.executeQuery()){
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    public Stats statsForManager(int managerId) throws SQLException {
+        Stats s = new Stats();
+        try(Connection c = DBConnection.getConnection()){
+
+            try(PreparedStatement ps = c.prepareStatement("""
+                SELECT COUNT(*) FROM Requests r
+                JOIN Users u ON u.id=r.created_by
+                WHERE r.status='PENDING' AND u.department IN (SELECT department FROM Users WHERE id=?)
+            """)){
+                ps.setInt(1, managerId);
+                try(ResultSet rs = ps.executeQuery()){ if(rs.next()) s.pendingCount = rs.getInt(1); }
+            }
+
+            try(PreparedStatement ps = c.prepareStatement("""
+                SELECT COUNT(*) FROM Requests r
+                JOIN Users u ON u.id=r.created_by
+                WHERE r.status='APPROVED'
+                  AND MONTH(r.start_date) = MONTH(GETDATE())
+                  AND YEAR(r.start_date)  = YEAR(GETDATE())
+                  AND u.department IN (SELECT department FROM Users WHERE id=?)
+            """)){
+                ps.setInt(1, managerId);
+                try(ResultSet rs = ps.executeQuery()){ if(rs.next()) s.approvedThisMonth = rs.getInt(1); }
+            }
+
+            try(PreparedStatement ps = c.prepareStatement("""
+                SELECT SUM(CASE WHEN r.status='APPROVED' THEN 1 ELSE 0 END) AS ok,
+                       COUNT(*) AS allcnt
+                FROM Requests r
+                JOIN Users u ON u.id=r.created_by
+                WHERE u.department IN (SELECT department FROM Users WHERE id=?)
+            """)){
+                ps.setInt(1, managerId);
+                try(ResultSet rs = ps.executeQuery()){
+                    if(rs.next()){
+                        s.approvalNumerator = rs.getInt("ok");
+                        s.approvalDenominator = rs.getInt("allcnt");
+                    }
+                }
+            }
+        }
+        return s;
+    }
+
+    private Request map(ResultSet rs) throws SQLException {
+        Request r = new Request();
+        r.setId(rs.getInt("id"));
+        r.setTitle(rs.getString("title"));
+        r.setReason(rs.getString("reason"));
+        Object sd = rs.getObject("start_date");
+        Object ed = rs.getObject("end_date");
+        if (sd != null) r.setStartDate(((java.sql.Date)sd).toLocalDate());
+        if (ed != null) r.setEndDate(((java.sql.Date)ed).toLocalDate());
+        r.setStatus(rs.getString("status"));
+        r.setCreatedBy(rs.getInt("created_by"));
+        r.setCreatedByName(rs.getString("created_by_name"));
+        int pb = rs.getInt("processed_by");
+        r.setProcessedBy(rs.wasNull()?null:pb);
+        r.setProcessedByName(rs.getString("processed_by_name"));
+        r.setManagerNote(rs.getString("manager_note"));
+        return r;
+    }
+
+
+
+
+
     private boolean updateDecisionWithHistory(int requestId, int uid, String uname, String note,
                                               String action, String sqlV0, String sqlV2) throws SQLException {
         try (Connection cn = DBConnection.getConnection()) {
@@ -958,4 +1175,6 @@ public void createRequest(Request r) throws SQLException {
 
         return r;
     }
+
+
 }
