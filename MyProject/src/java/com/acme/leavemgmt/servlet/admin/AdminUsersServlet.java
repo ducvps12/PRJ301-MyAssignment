@@ -2,11 +2,16 @@ package com.acme.leavemgmt.servlet.admin;
 
 import com.acme.leavemgmt.util.DBConnection;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.*;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 
+@WebServlet(name = "AdminUsersServlet", urlPatterns = {"/admin/users"})
 public class AdminUsersServlet extends HttpServlet {
 
   @Override
@@ -30,21 +35,19 @@ public class AdminUsersServlet extends HttpServlet {
       throw new ServletException(e);
     }
     req.setAttribute("users", users);
-    req.getRequestDispatcher("/WEB-INF/views/admin_users.jsp").forward(req, resp);
+    req.getRequestDispatcher("/WEB-INF/views/admin/users.jsp").forward(req, resp);
   }
 
   @Override
   protected void doPost(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
-    // action=resetpw&id=...
     String action = req.getParameter("action");
     if ("resetpw".equals(action)) {
       String id = req.getParameter("id");
-      String newPw = "123456"; // default
       String sql = "UPDATE Users SET password = ? WHERE id = ?";
       try (Connection cn = DBConnection.getConnection();
            PreparedStatement ps = cn.prepareStatement(sql)) {
-        ps.setString(1, newPw);
+        ps.setString(1, "123456");
         ps.setInt(2, Integer.parseInt(id));
         ps.executeUpdate();
       } catch (SQLException e) {

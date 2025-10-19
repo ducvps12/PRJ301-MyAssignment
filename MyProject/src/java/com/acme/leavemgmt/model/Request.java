@@ -3,15 +3,46 @@ package com.acme.leavemgmt.model;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Date;
 
 /**
- * Leave Request domain model.
- * Compatible with schema V1: Requests(id, user_id, type, status, reason, start_date, end_date, ...)
+ * Leave Request domain model. Compatible with schema V1: Requests(id, user_id,
+ * type, status, reason, start_date, end_date, ...)
  */
 public class Request implements Serializable {
 
+public Date getStartDateUtil() {
+    return (startDate != null) ? java.sql.Date.valueOf(startDate) : null;
+}
+public Date getEndDateUtil() {
+    return (endDate != null) ? java.sql.Date.valueOf(endDate) : null;
+}
     private int id;
 
+    private String attachmentName;  // nếu cần
+
+    public String getAttachmentName() {
+        return attachmentName;
+    }
+
+    public void setAttachmentName(String v) {
+        this.attachmentName = v;
+    }
+
+    public boolean isHasAttachment() {
+        return attachmentName != null && !attachmentName.isBlank();
+    }
+
+    private List<RequestHistory> history;
+
+    public List<RequestHistory> getHistory() {
+        return history;
+    }
+
+    public void setHistory(List<RequestHistory> history) {
+        this.history = history;
+    }
     // Optional "title" for UI (DB V1 không có cột title -> có thể null)
     private String title;
 
@@ -36,10 +67,11 @@ public class Request implements Serializable {
     private String managerNote;
 
     // ---------------- Constructors ----------------
-    public Request() {}
+    public Request() {
+    }
 
     public Request(int id, String reason, LocalDate startDate, LocalDate endDate,
-                   String status, int createdBy, String createdByName) {
+            String status, int createdBy, String createdByName) {
         this.id = id;
         this.reason = reason;
         this.startDate = startDate;
@@ -50,42 +82,98 @@ public class Request implements Serializable {
     }
 
     // ---------------- Getters / Setters ----------------
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public int getId() {
+        return id;
+    }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setId(int id) {
+        this.id = id;
+    }
 
-    public String getReason() { return reason; }
-    public void setReason(String reason) { this.reason = reason; }
+    public String getTitle() {
+        return title;
+    }
 
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+    public String getReason() {
+        return reason;
+    }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
 
-    public int getCreatedBy() { return createdBy; }
-    public void setCreatedBy(int createdBy) { this.createdBy = createdBy; }
+    public LocalDate getStartDate() {
+        return startDate;
+    }
 
-    public String getCreatedByName() { return createdByName; }
-    public void setCreatedByName(String createdByName) { this.createdByName = createdByName; }
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
 
-    public Integer getProcessedBy() { return processedBy; }
-    public void setProcessedBy(Integer processedBy) { this.processedBy = processedBy; }
+    public LocalDate getEndDate() {
+        return endDate;
+    }
 
-    public String getProcessedByName() { return processedByName; }
-    public void setProcessedByName(String processedByName) { this.processedByName = processedByName; }
+    public void setEndDate(LocalDate endDate) {
+        this.endDate = endDate;
+    }
 
-    public String getManagerNote() { return managerNote; }
-    public void setManagerNote(String managerNote) { this.managerNote = managerNote; }
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public int getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(int createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String createdByName) {
+        this.createdByName = createdByName;
+    }
+
+    public Integer getProcessedBy() {
+        return processedBy;
+    }
+
+    public void setProcessedBy(Integer processedBy) {
+        this.processedBy = processedBy;
+    }
+
+    public String getProcessedByName() {
+        return processedByName;
+    }
+
+    public void setProcessedByName(String processedByName) {
+        this.processedByName = processedByName;
+    }
+
+    public String getManagerNote() {
+        return managerNote;
+    }
+
+    public void setManagerNote(String managerNote) {
+        this.managerNote = managerNote;
+    }
 
     // ---------------- Helpers for JSP / UI ----------------
-
-    /** fmt:formatDate chỉ nhận java.util.Date → helper chuyển từ LocalDate */
+    /**
+     * fmt:formatDate chỉ nhận java.util.Date → helper chuyển từ LocalDate
+     */
     public java.util.Date getStartDateDate() {
         return startDate == null ? null : java.sql.Date.valueOf(startDate);
     }
@@ -94,32 +182,40 @@ public class Request implements Serializable {
         return endDate == null ? null : java.sql.Date.valueOf(endDate);
     }
 
-    /** Số ngày nghỉ (đã bao gồm cả ngày đầu/cuối) */
+    /**
+     * Số ngày nghỉ (đã bao gồm cả ngày đầu/cuối)
+     */
     public long getTotalDays() {
-        if (startDate == null || endDate == null) return 0L;
+        if (startDate == null || endDate == null) {
+            return 0L;
+        }
         return ChronoUnit.DAYS.between(startDate, endDate) + 1;
     }
 
-    /** Uppercase cho CSS pill trên UI */
+    /**
+     * Uppercase cho CSS pill trên UI
+     */
     public String getStatusUpper() {
         return status == null ? null : status.toUpperCase();
     }
 
-    /** Lowercase để lưu/so sánh với DB (CHECK constraint dùng chữ thường) */
+    /**
+     * Lowercase để lưu/so sánh với DB (CHECK constraint dùng chữ thường)
+     */
     public String getStatusLower() {
         return status == null ? null : status.toLowerCase();
     }
 
     @Override
     public String toString() {
-        return "Request{" +
-                "id=" + id +
-                ", reason='" + reason + '\'' +
-                ", startDate=" + startDate +
-                ", endDate=" + endDate +
-                ", status='" + status + '\'' +
-                ", createdBy=" + createdBy +
-                ", createdByName='" + createdByName + '\'' +
-                '}';
+        return "Request{"
+                + "id=" + id
+                + ", reason='" + reason + '\''
+                + ", startDate=" + startDate
+                + ", endDate=" + endDate
+                + ", status='" + status + '\''
+                + ", createdBy=" + createdBy
+                + ", createdByName='" + createdByName + '\''
+                + '}';
     }
 }

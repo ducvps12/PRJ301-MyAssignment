@@ -32,13 +32,10 @@
     <servlet-name>AuthServlet</servlet-name>
     <url-pattern>/login</url-pattern>
   </servlet-mapping>
-  
-  <!-- Thêm ngay dưới mapping /login hiện có -->
-<servlet-mapping>
-  <servlet-name>AuthServlet</servlet-name>
-  <url-pattern>/auth/login</url-pattern>
-</servlet-mapping>
-
+  <servlet-mapping>
+    <servlet-name>AuthServlet</servlet-name>
+    <url-pattern>/auth/login</url-pattern>
+  </servlet-mapping>
 
   <!-- ===== EMPLOYEE REQUEST FLOW ===== -->
   <servlet>
@@ -74,13 +71,13 @@
   </servlet>
   <servlet-mapping>
     <servlet-name>AgendaServlet</servlet-name>
-  <url-pattern>/request/agenda</url-pattern>
+    <url-pattern>/request/agenda</url-pattern>
   </servlet-mapping>
 
   <!-- ===== ADMIN AREA ===== -->
   <servlet>
     <servlet-name>AdminDashboardServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.web.admin.AdminDashboardServlet</servlet-class>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDashboardServlet</servlet-class>
   </servlet>
   <servlet-mapping>
     <servlet-name>AdminDashboardServlet</servlet-name>
@@ -89,9 +86,8 @@
 
   <servlet>
     <servlet-name>AdminUsersServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.web.admin.AdminUsersServlet</servlet-class>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
   </servlet>
-  <!-- có thể map nhiều pattern cho cùng 1 servlet-name bằng nhiều <servlet-mapping> -->
   <servlet-mapping>
     <servlet-name>AdminUsersServlet</servlet-name>
     <url-pattern>/admin/users</url-pattern>
@@ -101,28 +97,62 @@
     <url-pattern>/admin/users/toggle</url-pattern>
   </servlet-mapping>
 
+  <!-- ===== REQUEST DETAIL / CANCEL ===== -->
+  <servlet>
+    <servlet-name>RequestDetail</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.RequestDetailServlet</servlet-class>
+    <load-on-startup>1</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>RequestDetail</servlet-name>
+    <url-pattern>/request/detail</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
+    <servlet-name>RequestCancel</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.RequestCancelServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>RequestCancel</servlet-name>
+    <url-pattern>/request/cancel</url-pattern>
+  </servlet-mapping>
+
   <!-- ===== FILTERS ===== -->
   <filter>
     <filter-name>AuthFilter</filter-name>
     <filter-class>com.acme.leavemgmt.filter.AuthFilter</filter-class>
   </filter>
+  <filter-mapping>
+    <filter-name>AuthFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
 
-  <!-- bảo vệ các trang cần đăng nhập -->
+  <filter>
+    <filter-name>RoleFilter</filter-name>
+    <filter-class>com.acme.leavemgmt.filter.RoleFilter</filter-class>
+  </filter>
   <filter-mapping>
-    <filter-name>AuthFilter</filter-name>
-    <url-pattern>/request/*</url-pattern>
-    <dispatcher>REQUEST</dispatcher>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>AuthFilter</filter-name>
-    <url-pattern>/agenda</url-pattern>
-    <dispatcher>REQUEST</dispatcher>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>AuthFilter</filter-name>
+    <filter-name>RoleFilter</filter-name>
     <url-pattern>/admin/*</url-pattern>
-    <dispatcher>REQUEST</dispatcher>
   </filter-mapping>
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/request/approve</url-pattern>
+  </filter-mapping>
+
+  <!-- ===== ERROR PAGES (khuyến nghị) ===== -->
+  <error-page>
+    <error-code>403</error-code>
+    <location>/WEB-INF/views/errors/403.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>404</error-code>
+    <location>/WEB-INF/views/errors/404.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>500</error-code>
+    <location>/WEB-INF/views/errors/500.jsp</location>
+  </error-page>
 
   <!-- ===== SESSION ===== -->
   <session-config>

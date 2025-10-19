@@ -1,6 +1,7 @@
 package com.acme.leavemgmt.dao;
 
 import com.acme.leavemgmt.model.Request;
+import com.acme.leavemgmt.model.RequestHistory;
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.DBConnection;
 
@@ -374,10 +375,12 @@ public void createRequest(Request r) throws SQLException {
     }
 
     /** Lấy chi tiết đơn theo id (V2 → V1 → V0) */
+     /** Lấy chi tiết đơn theo id (V2 → V1 → V0) */
     public Request findById(int id) throws SQLException {
         final String sqlV2 = """
             SELECT
                 lr.request_id   AS id,
+                CAST(NULL AS NVARCHAR(255))  AS title, -- V2 không có title
                 lr.reason,
                 lr.from_date    AS start_date,
                 lr.to_date      AS end_date,
@@ -395,25 +398,27 @@ public void createRequest(Request r) throws SQLException {
         final String sqlV1 = """
             SELECT
                 r.id            AS id,
+                CAST(NULL AS NVARCHAR(255))  AS title, -- V1 không có title
                 r.reason,
                 r.start_date    AS start_date,
                 r.end_date      AS end_date,
                 r.status,
-                CAST(NULL AS NVARCHAR(400)) AS manager_note,
+                CAST(NULL AS NVARCHAR(400))  AS manager_note,
                 u.full_name     AS created_name,
                 r.user_id       AS created_by,
-                CAST(NULL AS NVARCHAR(200)) AS processed_name,
-                CAST(NULL AS INT)           AS processed_by
+                CAST(NULL AS NVARCHAR(200))  AS processed_name,
+                CAST(NULL AS INT)            AS processed_by
             FROM [dbo].[Requests] r
             JOIN [dbo].[Users] u ON u.id = r.user_id
             WHERE r.id = ?
         """;
         final String sqlV0 = """
             SELECT
-                r.id           AS id,
+                r.id            AS id,
+                r.title         AS title,      -- V0 có thể có title
                 r.reason,
-                r.start_date   AS start_date,
-                r.end_date     AS end_date,
+                r.start_date    AS start_date,
+                r.end_date      AS end_date,
                 r.status,
                 r.manager_note,
                 u_emp.full_name AS created_name,
@@ -427,29 +432,383 @@ public void createRequest(Request r) throws SQLException {
         """;
 
         try (Connection cn = DBConnection.getConnection()) {
+            // V2
             try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
                 ps.setInt(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) return mapRow(rs);
+                    if (rs.next()) {
+                        Request r = mapRowBasic(rs);
+                        r.setHistory(listHistory(cn, id));
+                        return r;
+                    }
                 }
-            } catch (SQLException ignoreV2) {}
+            } catch (SQLException ignoreV2) { /* tiếp tục fallback */ }
 
+            // V1
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
                 ps.setInt(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) return mapRow(rs);
+                    if (rs.next()) {
+                        Request r = mapRowBasic(rs);
+                        r.setHistory(listHistory(cn, id));
+                        return r;
+                    }
                 }
-            } catch (SQLException ignoreV1) {}
+            } catch (SQLException ignoreV1) { /* tiếp tục fallback */ }
 
+            // V0
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
                 ps.setInt(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) return mapRow(rs);
+                    if (rs.next()) {
+                        Request r = mapRowBasic(rs);
+                        r.setHistory(listHistory(cn, id));
+                        return r;
+                    }
                 }
             }
         }
         return null;
     }
+
+    /** Map các cột chung từ ResultSet → Request (không mở thêm kết nối) */
+    private Request mapRowBasic(ResultSet rs) throws SQLException {
+        Request r = new Request();
+        r.setId(rs.getInt("id"));
+
+        // cột 'title' có thể NULL (V2/V1), an toàn hóa:
+        try {
+            String title = rs.getString("title");
+            r.setTitle(title);
+        } catch (SQLException ignore) {
+            r.setTitle(null);
+        }
+
+        r.setReason(rs.getString("reason"));
+
+        Date sd = rs.getDate("start_date");
+        Date ed = rs.getDate("end_date");
+        r.setStartDate(sd != null ? sd.toLocalDate() : null);
+        r.setEndDate(ed != null ? ed.toLocalDate() : null);
+
+        r.setStatus(rs.getString("status"));
+        r.setManagerNote(rs.getString("manager_note"));
+
+        r.setCreatedBy(rs.getInt("created_by"));
+        r.setCreatedByName(rs.getString("created_name"));
+
+        int pb = rs.getInt("processed_by");
+        r.setProcessedBy(rs.wasNull() ? null : pb);
+        r.setProcessedByName(rs.getString("processed_name"));
+
+        // Nếu bạn có trường đính kèm:
+        try {
+            r.setAttachmentName(rs.getString("attachment_name"));
+        } catch (SQLException ignoreAttachment) { /* không có cột này thì bỏ qua */ }
+
+        return r;
+    }
+
+    // =======================
+    // ===== LỊCH SỬ (History)
+    // =======================
+
+    /** Thêm lịch sử (mở kết nối mới) */
+    public void insertHistory(int requestId, int actedBy, String actedByName,
+                              String action, String note) throws SQLException {
+        try (Connection cn = DBConnection.getConnection()) {
+            insertHistory(cn, requestId, actedBy, actedByName, action, note);
+        }
+    }
+
+    /** Thêm lịch sử (tái sử dụng connection có sẵn) */
+    private void insertHistory(Connection cn, int requestId, int actedBy, String actedByName,
+                               String action, String note) throws SQLException {
+        final String sql = """
+          INSERT INTO Request_History(request_id, action, note, acted_by, acted_by_name)
+          VALUES (?,?,?,?,?)
+        """;
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setInt(1, requestId);
+            ps.setString(2, action);
+            ps.setString(3, note);
+            ps.setInt(4, actedBy);
+            ps.setString(5, actedByName);
+            ps.executeUpdate();
+        }
+    }
+
+    /** Danh sách lịch sử (mở kết nối mới) */
+    public List<RequestHistory> listHistory(int requestId) throws SQLException {
+        try (Connection cn = DBConnection.getConnection()) {
+            return listHistory(cn, requestId);
+        }
+    }
+
+    /** Danh sách lịch sử (tái sử dụng connection) */
+    private List<RequestHistory> listHistory(Connection cn, int requestId) throws SQLException {
+        final String sql = """
+          SELECT id, request_id, action, note, acted_by, acted_by_name, acted_at
+          FROM Request_History
+          WHERE request_id = ?
+          ORDER BY acted_at DESC, id DESC
+        """;
+        List<RequestHistory> list = new ArrayList<>();
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setInt(1, requestId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    RequestHistory h = new RequestHistory();
+                    h.setId(rs.getInt("id"));
+                    h.setRequestId(rs.getInt("request_id"));
+                    h.setAction(rs.getString("action"));
+                    h.setNote(rs.getString("note"));
+                    h.setActedBy(rs.getInt("acted_by"));
+                    h.setActedByName(rs.getString("acted_by_name"));
+                    Timestamp ts = rs.getTimestamp("acted_at");
+                    h.setActedAt(ts != null ? ts.toLocalDateTime() : null);
+                    list.add(h);
+                }
+            }
+        }
+        return list;
+    }
+
+    // =======================
+    // ===== HỦY YÊU CẦU
+    // =======================
+
+    /**
+     * Hủy yêu cầu: chỉ cho phép khi là chủ đơn và trạng thái còn INPROGRESS.
+     * Ghi manager_note (lý do hủy) và người xử lý = chính người hủy.
+     */
+    public boolean cancelRequest(int requestId, int userId, String userName, String note) throws SQLException {
+        final String sql = """
+          UPDATE Requests
+          SET status = 'CANCELLED',
+              processed_by = ?, 
+              manager_note = ?
+          WHERE id = ? AND created_by = ? AND status = 'INPROGRESS'
+        """;
+        // Fallback cho schema V2 (tên cột khác)
+        final String sqlV2 = """
+          UPDATE Requests
+          SET status = 'CANCELLED',
+              approver_id = ?, 
+              manager_note = ?
+          WHERE request_id = ? AND employee_id = ? AND status = 'INPROGRESS'
+        """;
+
+        try (Connection cn = DBConnection.getConnection()) {
+            cn.setAutoCommit(false);
+            int rows;
+            // thử cho V0/V1 trước
+            try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, userId);
+                ps.setString(2, note);
+                ps.setInt(3, requestId);
+                ps.setInt(4, userId);
+                rows = ps.executeUpdate();
+            } catch (SQLException tryV2) {
+                // nếu lỗi cột, thử V2
+                try (PreparedStatement ps2 = cn.prepareStatement(sqlV2)) {
+                    ps2.setInt(1, userId);
+                    ps2.setString(2, note);
+                    ps2.setInt(3, requestId);
+                    ps2.setInt(4, userId);
+                    rows = ps2.executeUpdate();
+                }
+            }
+
+            if (rows > 0) {
+                insertHistory(cn, requestId, userId, userName, "CANCELLED", note);
+                cn.commit();
+                return true;
+            }
+            cn.rollback();
+            return false;
+        }
+    }
+
+    // =======================
+    // ===== TẠO MỚI (optional)
+    // =======================
+
+    /**
+     * Tạo đơn mới (tối giản) – trả về id mới. Tùy DB đặt tên cột tương ứng.
+     * Nhớ thêm lịch sử CREATED.
+     */
+    public int createRequest(Integer titleNullable, String reason, LocalDate start, LocalDate end,
+                             int createdBy, String createdByName) throws SQLException {
+        // V0/V1 đặt cột id tự tăng là id; V2 là request_id và employee_id/from_date/to_date
+        final String sqlV0 = """
+          INSERT INTO Requests(title, reason, start_date, end_date, status, created_by)
+          OUTPUT Inserted.id
+          VALUES (?, ?, ?, ?, 'INPROGRESS', ?)
+        """;
+        final String sqlV1 = """
+          INSERT INTO Requests(reason, start_date, end_date, status, user_id)
+          OUTPUT Inserted.id
+          VALUES (?, ?, ?, 'INPROGRESS', ?)
+        """;
+        final String sqlV2 = """
+          INSERT INTO Requests(employee_id, reason, from_date, to_date, status)
+          OUTPUT Inserted.request_id
+          VALUES (?, ?, ?, ?, 'INPROGRESS')
+        """;
+
+        try (Connection cn = DBConnection.getConnection()) {
+            cn.setAutoCommit(false);
+            Integer newId = null;
+
+            // cố gắng dùng V2 trước (schema “employee_id/from_date/to_date” khá phổ biến)
+            try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
+                ps.setInt(1, createdBy);
+                ps.setString(2, reason);
+                ps.setDate(3, start != null ? Date.valueOf(start) : null);
+                ps.setDate(4, end   != null ? Date.valueOf(end)   : null);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) newId = rs.getInt(1);
+                }
+            } catch (SQLException tryV1thenV0) {
+                // thử V1
+                if (newId == null) {
+                    try (PreparedStatement ps1 = cn.prepareStatement(sqlV1)) {
+                        ps1.setString(1, reason);
+                        ps1.setDate(2, start != null ? Date.valueOf(start) : null);
+                        ps1.setDate(3, end   != null ? Date.valueOf(end)   : null);
+                        ps1.setInt(4, createdBy);
+                        try (ResultSet rs = ps1.executeQuery()) {
+                            if (rs.next()) newId = rs.getInt(1);
+                        }
+                    } catch (SQLException tryV0) {
+                        // cuối cùng V0 (có title)
+                        try (PreparedStatement ps0 = cn.prepareStatement(sqlV0)) {
+                            ps0.setString(1, titleNullable != null ? String.valueOf(titleNullable) : null);
+                            ps0.setString(2, reason);
+                            ps0.setDate(3, start != null ? Date.valueOf(start) : null);
+                            ps0.setDate(4, end   != null ? Date.valueOf(end)   : null);
+                            ps0.setInt(5, createdBy);
+                            try (ResultSet rs = ps0.executeQuery()) {
+                                if (rs.next()) newId = rs.getInt(1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (newId == null) {
+                cn.rollback();
+                throw new SQLException("Không tạo được request mới (không xác định schema).");
+            }
+
+            insertHistory(cn, newId, createdBy, createdByName, "CREATED", null);
+            cn.commit();
+            return newId;
+        }
+    }
+
+    // ====================================
+    // ===== DUYỆT / TỪ CHỐI (optional)
+    // ====================================
+
+    public boolean approve(int requestId, int managerId, String managerName, String note) throws SQLException {
+        final String sqlV0 = """
+          UPDATE Requests SET status='APPROVED', processed_by=?, manager_note=?
+          WHERE id=? AND status='INPROGRESS'
+        """;
+        final String sqlV2 = """
+          UPDATE Requests SET status='APPROVED', approver_id=?, manager_note=?
+          WHERE request_id=? AND status='INPROGRESS'
+        """;
+        return updateDecisionWithHistory(requestId, managerId, managerName, note, "APPROVED", sqlV0, sqlV2);
+    }
+
+    public boolean reject(int requestId, int managerId, String managerName, String note) throws SQLException {
+        final String sqlV0 = """
+          UPDATE Requests SET status='REJECTED', processed_by=?, manager_note=?
+          WHERE id=? AND status='INPROGRESS'
+        """;
+        final String sqlV2 = """
+          UPDATE Requests SET status='REJECTED', approver_id=?, manager_note=?
+          WHERE request_id=? AND status='INPROGRESS'
+        """;
+        return updateDecisionWithHistory(requestId, managerId, managerName, note, "REJECTED", sqlV0, sqlV2);
+    }
+
+    private boolean updateDecisionWithHistory(int requestId, int uid, String uname, String note,
+                                              String action, String sqlV0, String sqlV2) throws SQLException {
+        try (Connection cn = DBConnection.getConnection()) {
+            cn.setAutoCommit(false);
+            int rows;
+            try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
+                ps.setInt(1, uid);
+                ps.setString(2, note);
+                ps.setInt(3, requestId);
+                rows = ps.executeUpdate();
+            } catch (SQLException tryV2) {
+                try (PreparedStatement ps2 = cn.prepareStatement(sqlV2)) {
+                    ps2.setInt(1, uid);
+                    ps2.setString(2, note);
+                    ps2.setInt(3, requestId);
+                    rows = ps2.executeUpdate();
+                }
+            }
+            if (rows > 0) {
+                insertHistory(cn, requestId, uid, uname, action, note);
+                cn.commit();
+                return true;
+            }
+            cn.rollback();
+            return false;
+        }
+    }
+
+    // =======================
+    // ===== LIST cơ bản (optional, phục vụ list.jsp có phân quyền)
+    // =======================
+
+    /** Liệt kê đơn theo người tạo (cho nhân viên) */
+    public List<Request> listByCreator(int userId) throws SQLException {
+        final String sql = """
+          SELECT id, title, reason, start_date, end_date, status, manager_note,
+                 created_by, NULL AS processed_by,
+                 CAST(NULL AS NVARCHAR(255)) AS created_name,
+                 CAST(NULL AS NVARCHAR(255)) AS processed_name
+          FROM Requests
+          WHERE created_by = ?
+          ORDER BY id DESC
+        """;
+        List<Request> out = new ArrayList<>();
+        try (Connection cn = DBConnection.getConnection();
+             PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) out.add(mapRowBasic(rs));
+            }
+        }
+        return out;
+    }
+
+    /** Liệt kê toàn bộ (cho manager) */
+    public List<Request> listAll() throws SQLException {
+        final String sql = """
+          SELECT id, title, reason, start_date, end_date, status, manager_note,
+                 created_by, processed_by,
+                 CAST(NULL AS NVARCHAR(255)) AS created_name,
+                 CAST(NULL AS NVARCHAR(255)) AS processed_name
+          FROM Requests
+          ORDER BY id DESC
+        """;
+        List<Request> out = new ArrayList<>();
+        try (Connection cn = DBConnection.getConnection();
+             PreparedStatement ps = cn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) out.add(mapRowBasic(rs));
+        }
+        return out;
+    }
+
 
     /** Duyệt/từ chối – nếu schema không có approver/manager_note thì chỉ update status */
     public void processRequest(int id, int managerId, String status, String note) throws SQLException {
