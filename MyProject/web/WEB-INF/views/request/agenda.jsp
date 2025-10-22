@@ -41,7 +41,6 @@
   .hidden{display:none}
   .cap-high{background:#fee2e2 !important; color:#7f1d1d}
   .cap-warn{background:#fffbeb !important; color:#92400e}
-  /* hover */
   tbody tr:hover td{background:#f9fafb}
   td.hovercol, th.hovercol{background:#f1f5f9 !important}
   @media print{
@@ -54,6 +53,9 @@
 </style>
 </head>
 <body>
+    <%@ include file="/WEB-INF/views/common/_header.jsp" %>
+
+
 <div class="wrap">
   <h2>Agenda – Lịch nghỉ phòng ban</h2>
 
@@ -105,7 +107,7 @@
       <thead>
       <tr>
         <th class="col-name">Nhân viên</th>
-        <c:forEach var="d" items="${days}" varStatus="st">
+        <c:forEach var="d" items="${days}">
           <th class="${d.dayOfWeek.value >= 6 ? 'weekend' : ''}" data-date="${d}" data-dow="${d.dayOfWeek.value}">
             <div style="display:flex;flex-direction:column;gap:2px">
               <span class="muted">
@@ -125,6 +127,7 @@
         </c:forEach>
       </tr>
       </thead>
+
       <tbody>
       <c:forEach var="u" items="${users}">
         <c:set var="uid" value="${u.id}" />
@@ -143,8 +146,8 @@
             </c:if>
 
             <td class="${d.dayOfWeek.value >= 6 ? 'weekend' : ''}"
-                data-absent="${(isApproved or isPending) ? 1 : 0}"
-                data-pending="${isPending ? 1 : 0}"
+                data-absent="${(isApproved or isPending) ? '1' : '0'}"
+                data-pending="${isPending ? '1' : '0'}"
                 title="<fmt:formatDate value='${java.sql.Date.valueOf(d)}' pattern='dd/MM/yyyy'/>">
               <c:choose>
                 <c:when test="${isPending}"><span class="pend">⏳</span></c:when>
@@ -175,7 +178,7 @@
 
 <script>
 (function(){
-  const $ = s => document.querySelector(s);
+  const $  = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
 
   // ======= Range helpers
@@ -202,14 +205,14 @@
     const f2 = add(t,1), t2 = add(f2,6); setRange(toISO(f2), toISO(t2));
   };
 
-  // ======= Highlight today column
-  const today = new Date().toISOString().slice(0,10);
-  $$("#agendaTbl thead th").forEach((th,i)=>{
-    if (th.dataset.date === today){
+  // ======= Highlight today column (theo index nguyên thủy, vẫn đúng dù cột bị ẩn bằng display:none)
+  const todayISO = new Date().toISOString().slice(0,10);
+  const ths = $$("#agendaTbl thead th");
+  ths.forEach((th,i)=>{
+    if (th.dataset.date === todayISO){
       th.classList.add("today");
-      // tất cả cell cùng cột
-      $$("#agendaTbl tbody tr").forEach(tr=> tr.children[i].classList.add("today"));
-      $$("#agendaTbl tfoot tr").forEach(tr=> tr.children[i].classList.add("today"));
+      $$("#agendaTbl tbody tr").forEach(tr=> tr.children[i]?.classList.add("today"));
+      $$("#agendaTbl tfoot tr").forEach(tr=> tr.children[i]?.classList.add("today"));
     }
   });
 
@@ -222,40 +225,44 @@
         if (c) c.classList.add("hovercol");
       });
     });
-    td.addEventListener("mouseleave",()=>{
-      $$(".hovercol").forEach(c=>c.classList.remove("hovercol"));
-    });
+    td.addEventListener("mouseleave",()=> $$(".hovercol").forEach(c=>c.classList.remove("hovercol")));
   });
 
-  // ======= Recompute totals with capacity highlight
-  const capacity = Number("${capacityPerDay}") || 0; // optional from backend
+  // ======= Recompute totals (đếm theo các cột đang hiển thị)
+  const capacity = Number("${capacityPerDay}") || 0; // optional backend
   function recompute(){
-    const rows = $$("#agendaTbl tbody tr:not(.hidden)");
-    const cols = $("#agendaTbl thead tr").children.length - 1;
-    for (let c=0;c<cols;c++){
-      let total=0;
-      rows.forEach(r=>{
-        const cell = r.children[c+1];
-        if (cell && cell.dataset.absent==="1") total++;
+    const headThAll = Array.from(document.querySelectorAll("#agendaTbl thead th")).slice(1); // bỏ cột tên
+    const bodyRows  = Array.from(document.querySelectorAll("#agendaTbl tbody tr:not(.hidden)"));
+    const footTds   = Array.from(document.querySelectorAll("#agendaTbl tfoot tr td"));
+
+    headThAll.forEach((th, idxFrom1) => {
+      // idxFrom1 là index tính từ 1 (vì cột 0 là tên)
+      if (getComputedStyle(th).display === "none") return;
+
+      let total = 0;
+      bodyRows.forEach(tr => {
+        const cell = tr.children[idxFrom1 + 0]; // vì tr.children[0] là col-name, th ở đây đã slice(1)
+        if (cell && cell.getAttribute("data-absent") === "1") total++;
       });
-      const ft = $(`#agendaTbl tfoot tr td:nth-child(${c+2})`);
+
+      const ft = footTds[idxFrom1 + 1]; // footer: col 0 là label "Tổng người nghỉ"
       if (ft){
-        ft.textContent = total;
+        ft.textContent = String(total);
         ft.dataset.colTotal = total;
         ft.classList.remove("cap-high","cap-warn");
-        if (capacity>0){
+        if (capacity > 0){
           if (total >= capacity) ft.classList.add("cap-high");
-          else if (total >= Math.ceil(capacity*0.7)) ft.classList.add("cap-warn");
+          else if (total >= Math.ceil(capacity * 0.7)) ft.classList.add("cap-warn");
         }
       }
-    }
+    });
   }
-  recompute();
 
   // ======= Filters
   const search = $("#search");
   const onlyAbsent = $("#onlyAbsent");
   const onlyChanged = $("#onlyChanged");
+
   function applyFilters(){
     const term = (search.value||"").trim().toLowerCase();
     $$("#agendaTbl tbody tr").forEach(tr=>{
@@ -273,8 +280,9 @@
     });
     recompute();
   }
-  search.addEventListener("input", applyFilters);
-  onlyAbsent.addEventListener("change", applyFilters);
+
+  search.addEventListener("input",  applyFilters);
+  onlyAbsent.addEventListener("change",  applyFilters);
   onlyChanged.addEventListener("change", applyFilters);
 
   // ======= Toggle weekend
@@ -284,16 +292,19 @@
     $$("#agendaTbl th.weekend, #agendaTbl td.weekend").forEach(td=>{
       td.style.display = show ? "" : "none";
     });
+    recompute(); // cập nhật tổng khi ẩn/hiện cuối tuần
   }
   toggleWeekend.addEventListener("change", applyWeekend);
-  applyWeekend();
 
-  // ======= Export CSV (respect hidden rows/cols)
+  // ======= Export CSV (tôn trọng hàng/cột đang hiển thị)
   $("#btnCsv").onclick = ()=>{
     const table = $("#agendaTbl");
-    // visible column indices
     const headCells = Array.from(table.tHead.rows[0].cells);
-    const visibleIdx = headCells.map((c,i)=>({i,disp:getComputedStyle(c).display})).filter(x=>x.disp!=="none").map(x=>x.i);
+    // cột hiển thị (display != none)
+    const visibleIdx = headCells
+      .map((c,i)=>({i,disp:getComputedStyle(c).display}))
+      .filter(x=>x.disp!=="none")
+      .map(x=>x.i);
 
     const rows=[];
     // header
@@ -329,7 +340,12 @@
     url.search = params.toString();
     navigator.clipboard.writeText(url.toString()).then(()=> alert("Đã copy link bộ lọc!"));
   };
+
+  // ======= Khởi tạo lần đầu
+  applyWeekend();   // đảm bảo trạng thái hiển thị cột cuối tuần
+  recompute();      // tính tổng ngay khi load
 })();
 </script>
 </body>
 </html>
+    <%@ include file="/WEB-INF/views/common/_footer.jsp" %>

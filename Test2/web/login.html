@@ -1,16 +1,43 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
-<meta charset="utf-8">
-<title>Login</title>
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+</head>
 <body>
-
   <form method="post" action="login">
-    <label>User</label>
-    <input type="text" name="user" required><br><br>
+    <!-- USERNAME -->
+    <label for="txtUser">User</label>
+    <input type="text" id="txtUser" name="txtUser" required><br><br>
 
-    <label>Pass</label>
-    <input type="password" name="pass" required><br><br>
+    <!-- PASSWORD -->
+    <label for="txtPass">Pass</label>
+    <input type="password" id="txtPass" name="txtPass" required><br><br>
 
+    <!-- GENDER (radio) -->
+    <fieldset id="radGender">
+      <legend>Giới tính</legend>
+      <label><input type="radio" name="radGender" value="Male" required> Nam</label>
+      <label><input type="radio" name="radGender" value="Female"> Nữ</label>
+    </fieldset><br>
+
+    <!-- HOBBY (checkbox) -->
+    <fieldset id="cbHobby">
+      <legend>Sở thích</legend>
+      <label><input type="checkbox" name="cbRead"> Đọc sách</label>
+      <label><input type="checkbox" name="cbCode"> Code</label>
+      <label><input type="checkbox" name="cbGame"> Game</label>
+    </fieldset><br>
+
+    <!-- DROPDOWNLIST -->
+    <label for="dlRole">Vai trò</label>
+    <select id="dlRole" name="dlRole" required>
+      <option value="">--Chọn vai trò--</option>
+      <option value="admin">Admin</option>
+      <option value="user">User</option>
+    </select><br><br>
+
+    <!-- SUBMIT -->
     <button type="submit">Login</button>
   </form>
 </body>

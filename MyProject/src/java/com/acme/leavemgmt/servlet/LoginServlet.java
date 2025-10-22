@@ -1,7 +1,9 @@
 package com.acme.leavemgmt.servlet;
 
+import com.acme.leavemgmt.dao.ActivityDAO;
 import com.acme.leavemgmt.dao.RequestDAO;
 import com.acme.leavemgmt.model.User;
+import com.acme.leavemgmt.util.WebUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -46,9 +48,19 @@ public class LoginServlet extends HttpServlet {
 
             // --- Ngăn session fixation & set đúng session keys ---
             HttpSession old = req.getSession(false);
-            if (old != null) old.invalidate();
+            if (old != null) {
+                old.invalidate();
+            }
             HttpSession session = req.getSession(true); // tạo session mới
             session.setAttribute("currentUser", u);     // <<< quan trọng: key chuẩn dùng bởi RoleFilter/JSP
+
+            // log
+            new ActivityDAO().log(
+                    u.getId(),
+                    "LOGIN", "USER", u.getId(),
+                    "Đăng nhập thành công",
+                    WebUtil.clientIp(req), WebUtil.userAgent(req)
+            );
 
             // (tuỳ bạn, có thể set thêm các alias nếu view cũ đang dùng)
             session.setAttribute("fullName", u.getFullName());
@@ -65,5 +77,7 @@ public class LoginServlet extends HttpServlet {
         }
     }
 
-    private static String trim(String s) { return s == null ? "" : s.trim(); }
+    private static String trim(String s) {
+        return s == null ? "" : s.trim();
+    }
 }

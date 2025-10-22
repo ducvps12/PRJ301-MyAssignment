@@ -162,17 +162,31 @@
 
 
 
-
-
-
+<!-- Profile -->
 <servlet>
-    <servlet-name>ProfileServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.ProfileServlet</servlet-class>
+  <servlet-name>ActivityDAO</servlet-name>
+  <servlet-class>com.acme.leavemgmt.dao.ActivityDAO</servlet-class>
+  <load-on-startup>2</load-on-startup>
 </servlet>
 
 <servlet-mapping>
-    <servlet-name>ProfileServlet</servlet-name>
-    <url-pattern>/profile</url-pattern>
+  <servlet-name>ActivityDAO</servlet-name>
+  <url-pattern>/activity</url-pattern>
+</servlet-mapping>
+
+
+
+
+<!-- Profile -->
+<servlet>
+  <servlet-name>ProfileServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.ProfileServlet</servlet-class>
+  <load-on-startup>2</load-on-startup>
+</servlet>
+
+<servlet-mapping>
+  <servlet-name>ProfileServlet</servlet-name>
+  <url-pattern>/profile</url-pattern>
 </servlet-mapping>
 
 
