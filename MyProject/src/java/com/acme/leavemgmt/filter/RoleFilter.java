@@ -1,96 +1,90 @@
 /*
  * RoleFilter – chặn truy cập theo vai trò
- * Áp dụng cho: /request/approve và /admin/*
+ * Áp dụng cho: /admin[/...], /request/approve[/...]
  */
 package com.acme.leavemgmt.filter;
 
 import com.acme.leavemgmt.model.User;
-import jakarta.servlet.Filter;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.FilterConfig;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
+import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
-import java.util.Objects;
 
-@WebFilter(filterName = "RoleFilter", urlPatterns = {"/request/approve", "/admin/*"})
+@WebFilter(
+  filterName = "RoleFilter",
+  urlPatterns = {
+      "/admin", "/admin/*",
+      "/request/approve", "/request/approve/*"
+  }
+)
 public class RoleFilter implements Filter {
 
-    @Override
-    public void init(FilterConfig filterConfig) throws ServletException {
-        // no-op
+  @Override
+  public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
+      throws IOException, ServletException {
+
+    HttpServletRequest r = (HttpServletRequest) req;
+    HttpServletResponse w = (HttpServletResponse) res;
+
+    // Cho phép preflight
+    if ("OPTIONS".equalsIgnoreCase(r.getMethod())) {
+      chain.doFilter(req, res);
+      return;
     }
 
-    @Override
-    public void destroy() {
-        // no-op
+    // ==== 1. Kiểm tra đăng nhập ====
+    HttpSession session = r.getSession(false);
+    User me = (session != null) ? (User) session.getAttribute("currentUser") : null;
+
+    if (me == null) {
+      w.sendRedirect(r.getContextPath() + "/login");
+      return;
     }
 
-    @Override
-    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
-            throws IOException, ServletException {
+    // ==== 2. Xác định role ====
+    String role = (me.getRole() == null ? "" : me.getRole()).toUpperCase();
+    String path = r.getRequestURI().substring(r.getContextPath().length());
 
-        HttpServletRequest  r = (HttpServletRequest) req;
-        HttpServletResponse w = (HttpServletResponse) res;
+    boolean isLead = role.endsWith("_LEAD") || role.endsWith("_LEADER");
 
-        // Cho qua preflight nếu cần
-        if ("OPTIONS".equalsIgnoreCase(r.getMethod())) {
-            chain.doFilter(req, res);
-            return;
-        }
+    // ==== 3. Phân quyền ====
+    boolean allowed = true;
 
-        // Kiểm tra đăng nhập
-        User me = (User) r.getSession().getAttribute("user");
-        if (me == null) {
-            // Đồng bộ với form login của bạn: /auth/login
-            w.sendRedirect(r.getContextPath() + "/auth/login");
-            return;
-        }
+    if ("/admin".equals(path) || path.startsWith("/admin/")) {
+      // Dashboard: ADMIN + LEAD
+      if (!(role.equals("ADMIN") || isLead)) allowed = false;
 
-        // Lấy role; mặc định EMPLOYEE nếu null
-        String role = Objects.toString(me.getRoleCode(), "EMPLOYEE").toUpperCase();
-
-        // Lấy đường dẫn tương đối (không gồm context)
-        String uri         = r.getRequestURI();
-        String contextPath = r.getContextPath();
-        String path        = uri.startsWith(contextPath) ? uri.substring(contextPath.length()) : uri;
-
-        boolean allowed = isAllowed(path, role);
-
-        if (!allowed) {
-            // Forward tới trang 403 nếu có; nếu không, trả lỗi 403
-            r.setAttribute("code", 403);
-            try {
-                r.getRequestDispatcher("/WEB-INF/views/errors/403.jsp").forward(r, w);
-            } catch (Exception ignore) {
-                w.sendError(HttpServletResponse.SC_FORBIDDEN);
-            }
-            return;
-        }
-
-        // Pass xuống tầng dưới
-        chain.doFilter(req, res);
+      // /admin/users chỉ ADMIN
+      if (path.startsWith("/admin/users") && !role.equals("ADMIN")) allowed = false;
     }
 
-    /**
-     * Quản trị (/admin/*): ADMIN | LEADER
-     * Duyệt đơn (/request/approve[/*]): MANAGER | ADMIN
-     */
-    private boolean isAllowed(String path, String role) {
-        // /admin/**
-        if (path.startsWith("/admin/")) {
-            return "ADMIN".equals(role) || "LEADER".equals(role);
-        }
-        // /request/approve hoặc /request/approve/...
-        if (path.equals("/request/approve") || path.startsWith("/request/approve/")) {
-            return "MANAGER".equals(role) || "ADMIN".equals(role);
-        }
-        // Mặc định (không match filter patterns) – cho qua
-        return true;
+    if ("/request/approve".equals(path) || path.startsWith("/request/approve/")) {
+      // Duyệt đơn: ADMIN + LEAD
+      if (!(role.equals("ADMIN") || isLead)) allowed = false;
     }
+
+    // ==== 4. Hành động khi không có quyền ====
+    if (!allowed) {
+      // Ghi log nhẹ để debug (tùy chọn)
+      System.out.printf("[RoleFilter] ACCESS DENIED: %s -> %s%n", me, path);
+
+      try {
+        // Nếu có trang lỗi riêng
+        r.setAttribute("code", 403);
+        r.getRequestDispatcher("/WEB-INF/views/errors/403.jsp").forward(r, w);
+      } catch (Exception ex) {
+        w.sendError(HttpServletResponse.SC_FORBIDDEN, "Bạn không có quyền truy cập trang này.");
+      }
+      return;
+    }
+
+    // ==== 5. Cho qua ====
+    chain.doFilter(req, res);
+  }
+
+  @Override public void init(FilterConfig filterConfig) {}
+  @Override public void destroy() {}
 }

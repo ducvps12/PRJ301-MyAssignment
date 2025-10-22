@@ -17,7 +17,6 @@ public class LoginServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
-        // Hiển thị form đăng nhập
         req.getRequestDispatcher("/WEB-INF/views/index.jsp").forward(req, resp);
     }
 
@@ -38,31 +37,33 @@ public class LoginServlet extends HttpServlet {
         }
 
         try {
-            User u = dao.findByUsernameAndPassword(username, password);
-            if (u != null) {
-                // Ngăn session fixation
-                HttpSession old = req.getSession(false);
-                if (old != null) old.invalidate();
-                HttpSession s = req.getSession(true);
-                try { s = req.changeSessionId() != null ? req.getSession(false) : s; } catch (Throwable ignore) {}
-
-                s.setAttribute("userId", u.getId());
-                s.setAttribute("fullName", u.getFullName());
-                s.setAttribute("role", u.getRole());
-                s.setAttribute("department", u.getDepartment());
-
-                // Điều hướng tới danh sách đơn của tôi
-                resp.sendRedirect(req.getContextPath() + "/request/list");
-            } else {
+            User u = dao.findByUsernameAndPassword(username, password); // trả về null nếu sai
+            if (u == null) {
                 req.setAttribute("error", "Sai tài khoản hoặc mật khẩu.");
                 req.getRequestDispatcher("/WEB-INF/views/index.jsp").forward(req, resp);
+                return;
             }
+
+            // --- Ngăn session fixation & set đúng session keys ---
+            HttpSession old = req.getSession(false);
+            if (old != null) old.invalidate();
+            HttpSession session = req.getSession(true); // tạo session mới
+            session.setAttribute("currentUser", u);     // <<< quan trọng: key chuẩn dùng bởi RoleFilter/JSP
+
+            // (tuỳ bạn, có thể set thêm các alias nếu view cũ đang dùng)
+            session.setAttribute("fullName", u.getFullName());
+            session.setAttribute("role", u.getRole());
+            session.setAttribute("department", u.getDepartment());
+
+            // --- Điều hướng sau login ---
+            String ctx = req.getContextPath();
+            String dest = (u.canAccessAdminDashboard()) ? "/admin" : "/request/list";
+            resp.sendRedirect(ctx + dest);
+
         } catch (SQLException e) {
             throw new ServletException("Database error during login", e);
         }
     }
 
-    private static String trim(String s) {
-        return s == null ? "" : s.trim();
-    }
+    private static String trim(String s) { return s == null ? "" : s.trim(); }
 }

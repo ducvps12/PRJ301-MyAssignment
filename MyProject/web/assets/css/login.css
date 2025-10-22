@@ -1,0 +1,156 @@
+:root{
+  --bg:#f6f8fb; --bg-grad1:#eef2ff; --bg-grad2:#eff6ff;
+  --card:#ffffff; --tx:#0f172a; --muted:#64748b; --bd:#e5e7eb;
+  --pri:#2563eb; --pri-ink:#fff; --err:#dc2626; --ok:#16a34a;
+  --ring:#93c5fd; --shadow:0 10px 25px rgba(2,6,23,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b1220; --bg-grad1:#0b1220; --bg-grad2:#0b1220;
+    --card:#0f172a; --tx:#e5e7eb; --muted:#9aa5b1; --bd:#1f2a3a;
+    --pri:#3b82f6; --pri-ink:#0b1220; --ring:#1d4ed8; --shadow:0 10px 25px rgba(0,0,0,.35);
+  }
+}
+
+/* Page */
+html,body{height:100%}
+body{
+  margin:0;
+  font:14.5px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  color:var(--tx);
+  background:
+    radial-gradient(1200px 800px at 10% -10%, var(--bg-grad1), transparent 60%),
+    radial-gradient(900px 600px at 110% 10%, var(--bg-grad2), transparent 50%),
+    var(--bg);
+  display:flex; align-items:center; justify-content:center; padding:24px;
+  overflow:hidden;
+}
+
+/* Background floaters */
+.floaters{position:fixed; inset:0; overflow:hidden; pointer-events:none; z-index:-1}
+.floaters span{
+  position:absolute; top:100%; opacity:.08; filter:saturate(120%);
+  font-size:28px; animation:rise 18s linear infinite, drift 6s ease-in-out infinite alternate;
+  transform:translateY(0) translateX(0) rotate(0deg); user-select:none;
+}
+.floaters span:nth-child(1){left:6%;  animation-delay:-1s}
+.floaters span:nth-child(2){left:18%; animation-delay:-6s}
+.floaters span:nth-child(3){left:28%; animation-delay:-11s}
+.floaters span:nth-child(4){left:40%; animation-delay:-4s}
+.floaters span:nth-child(5){left:52%; animation-delay:-12s}
+.floaters span:nth-child(6){left:64%; animation-delay:-7s}
+.floaters span:nth-child(7){left:74%; animation-delay:-2s}
+.floaters span:nth-child(8){left:86%; animation-delay:-9s}
+.floaters span:nth-child(9){left:12%; animation-delay:-14s}
+.floaters span:nth-child(10){left:78%; animation-delay:-16s}
+@keyframes rise{
+  0%{top:102%; transform:translateY(0) rotate(0)}
+  100%{top:-8%; transform:translateY(-110vh) rotate(360deg)}
+}
+@keyframes drift{
+  0%{transform:translateX(-8px)}
+  100%{transform:translateX(8px)}
+}
+@media (prefers-reduced-motion: reduce){ .floaters{display:none} }
+
+/* Layout */
+.wrap{
+  width:100%;
+  /* rộng hơn trên PC, vẫn gọn trên mobile */
+  max-width: clamp(420px, 40vw, 680px);
+}
+.brand{display:flex; align-items:center; gap:12px; justify-content:center; margin-bottom:18px; user-select:none}
+.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#60a5fa,#2563eb); box-shadow:var(--shadow)}
+.brand .title{font-weight:800; letter-spacing:.2px}
+
+.actions{display:flex; justify-content:flex-end; margin-bottom:10px}
+.tiny{border:1px solid var(--bd); background:transparent; color:var(--muted); border-radius:10px; padding:6px 10px; cursor:pointer}
+.tiny:focus-visible{outline:none; box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent)}
+
+.card{
+  /* thêm -webkit- backdrop để Safari ổn định */
+  background:color-mix(in oklab, var(--card) 88%, transparent);
+  -webkit-backdrop-filter:saturate(130%) blur(6px);
+  backdrop-filter:saturate(130%) blur(6px);
+  border:1px solid var(--bd); border-radius:16px; box-shadow:var(--shadow);
+  padding:20px 18px;
+}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:var(--muted); margin:0 0 14px}
+
+/* Form */
+form{display:grid; gap:12px}
+label{font-weight:650; font-size:13px}
+.input-wrap{display:grid; gap:6px}
+.input{
+  width:100%; padding:12px 12px; border:1px solid var(--bd); border-radius:12px; background:transparent; color:var(--tx);
+  outline:none; transition:box-shadow .15s, border-color .15s, background .2s;
+}
+.input:focus{box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent); border-color: color-mix(in oklab, var(--pri) 40%, var(--bd))}
+.input[aria-invalid="true"]{border-color:var(--err); box-shadow:0 0 0 3px color-mix(in oklab, var(--err) 25%, transparent)}
+
+.pw{position:relative}
+.pw .toggle{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  border:0; background:transparent; padding:6px 8px; cursor:pointer; color:var(--muted); border-radius:8px;
+}
+.pw .toggle:focus-visible{outline:none; box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent)}
+
+.row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:2px; flex-wrap:wrap}
+.check{display:flex; align-items:center; gap:8px; color:var(--muted)}
+.check input{inline-size:18px; block-size:18px}
+.link{color:var(--pri); text-decoration:none}
+.link:hover{text-decoration:underline}
+
+.btn{
+  appearance:none; border:0; border-radius:12px; padding:12px 14px; font-weight:800; cursor:pointer;
+  background:linear-gradient(180deg, color-mix(in oklab, var(--pri) 96%, #000 0%), var(--pri));
+  color:var(--pri-ink); box-shadow:0 10px 16px rgba(37,99,235,.16); transition: transform .06s ease, filter .2s; width:100%;
+}
+.btn:hover{filter:brightness(1.03)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.6; cursor:not-allowed; filter:grayscale(.2)}
+
+.alert{
+  display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:12px;
+  border:1px solid color-mix(in oklab, var(--err) 35%, var(--bd));
+  background: color-mix(in oklab, var(--err) 9%, var(--card));
+  color: color-mix(in oklab, var(--err) 70%, #000); margin:0 0 12px;
+}
+.help{color:var(--muted); font-size:12.5px; margin-top:-6px}
+.meta{display:flex; justify-content:center; gap:6px; font-size:13px; color:var(--muted); margin-top:12px}
+
+/* Mobile */
+@media (max-width:480px){
+  body{padding:16px}
+  .wrap{max-width:100%}
+  .card{padding:18px 14px}
+  .brand .title{font-size:16px}
+  h1{font-size:20px}
+  .row{gap:8px}
+  .check input{inline-size:20px; block-size:20px}
+}
+
+/* Tablet / iPad */
+@media (min-width:481px) and (max-width:992px){
+  .wrap{max-width:520px}
+  .brand .title{font-size:18px}
+  h1{font-size:22px}
+}
+
+/* Desktop rộng */
+@media (min-width:993px){
+  .card{ padding:24px 22px; }
+  .input{ padding:14px 14px; font-size:15px; }
+  .btn{ padding:14px 16px; font-size:15px; }
+  h1{ font-size:24px; }
+}
+
+/* Desktop rất rộng (2K/4K) */
+@media (min-width:1440px){
+  .wrap{ max-width:720px; }
+  .card{ padding:26px 24px; }
+}
+@media (min-width:1920px){
+  .wrap{ max-width:800px; }
+}

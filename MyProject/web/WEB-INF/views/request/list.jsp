@@ -7,101 +7,8 @@
   <title>Danh sách đơn nghỉ phép</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <style>
-    :root{
-      --bg:#f6f8fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280;
-      --pri:#2563eb; --ok:#16a34a; --no:#dc2626; --warn:#d97706;
-      --bd:#e5e7eb; --row:#fafafa; --ring:rgba(37,99,235,.25);
-    }
-    [data-theme="dark"]{
-      --bg:#0f1320; --card:#12172a; --text:#e5e7eb; --muted:#9aa3b2;
-      --pri:#66a2ff; --ok:#22d38b; --no:#ff6b6b; --warn:#f0ad4e;
-      --bd:#1e2438; --row:#0f162b; --ring:rgba(102,162,255,.28);
-    }
-    html,body{background:var(--bg);color:var(--text)}
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px}
-    .wrap{max-width:1200px;margin:auto}
-
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--bd);background:var(--card);cursor:pointer;font-size:12px}
-    .chip.active{border-color:var(--pri);box-shadow:0 0 0 3px var(--ring)}
-
-    .card{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--card);box-shadow:0 10px 22px rgba(0,0,0,.04)}
-    .card-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(0deg,var(--row),var(--row))}
-    .muted{color:var(--muted)}
-
-    table{width:100%;border-collapse:separate;border-spacing:0}
-    th,td{padding:10px 12px;border-top:1px solid var(--bd);vertical-align:middle}
-    th{position:sticky;top:0;background:var(--row);text-align:left;font-weight:700;z-index:2}
-    tbody tr:nth-child(odd){background:transparent}
-    tbody tr:nth-child(even){background:rgba(0,0,0,0.015)}
-    [data-theme="dark"] tbody tr:nth-child(even){background:#0c1326}
-    tbody tr:hover{background:rgba(37,99,235,.06)}
-    [data-theme="dark"] tbody tr:hover{background:rgba(102,162,255,.12)}
-    .row-select{width:34px}
-
-    .btn,.btn-icon{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--bd);text-decoration:none;color:var(--text);background:var(--card);cursor:pointer;transition:transform .05s}
-    .btn:active,.btn-icon:active{transform:translateY(1px)}
-    .btn-primary{background:var(--pri);border-color:var(--pri);color:#fff}
-    .btn-ghost{background:var(--card)}
-    .btn-icon{padding:6px 8px}
-
-    input[type="text"], input[type="date"], select, textarea{
-      padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111;
-      transition:box-shadow .15s,border-color .15s
-    }
-    [data-theme="dark"] input[type="text"], [data-theme="dark"] input[type="date"],
-    [data-theme="dark"] select, [data-theme="dark"] textarea{
-      background:#0b1020;color:#e5e7eb;border-color:#26304a
-    }
-    :is(input,select,textarea):focus{outline:0;border-color:var(--pri);box-shadow:0 0 0 3px var(--ring)}
-
-    .pill{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid transparent}
-    .PENDING{background:#fff7ed;color:#9a3412;border-color:#fde68a}
-    .APPROVED{background:#ecfdf5;color:#14532d;border-color:#bbf7d0}
-    .REJECTED{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
-    .CANCELLED{background:#f3f4f6;color:#374151;border-color:#e5e7eb}
-    [data-theme="dark"] .PENDING{background:#2a1e06;color:#f6ca7a;border-color:#5e4b20}
-    [data-theme="dark"] .APPROVED{background:#073221;color:#8ee0bd;border-color:#1c6b4f}
-    [data-theme="dark"] .REJECTED{background:#2c0c0c;color:#ff9f9f;border-color:#6b2323}
-    [data-theme="dark"] .CANCELLED{background:#1b2030;color:#bcc6d9;border-color:#2a3148}
-
-    .table-actions a{margin-right:6px}
-    .table-actions .danger{color:var(--no)}
-    .table-actions .ok{color:var(--ok)}
-    .table-actions .warn{color:var(--warn)}
-
-    .pagination{display:flex;gap:6px;justify-content:flex-end;padding:10px}
-    .pagination a,.pagination span{padding:6px 10px;border:1px solid var(--bd);border-radius:8px;text-decoration:none;background:var(--card);color:var(--text)}
-    .pagination span[aria-current="page"]{box-shadow:0 0 0 3px var(--ring);border-color:var(--pri)}
-
-    .kpi{display:flex;gap:10px;flex-wrap:wrap}
-    .kpi .box{border:1px solid var(--bd);border-radius:12px;padding:10px 12px;background:var(--card);box-shadow:0 6px 14px rgba(0,0,0,.04)}
-
-    .empty{padding:28px;text-align:center;color:var(--muted)}
-
-    /* Bulk action floating bar */
-    .bulkbar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--bd);padding:8px 12px;display:none;align-items:center;gap:8px;z-index:5}
-    .bulkbar.show{display:flex}
-    .badgeSel{border:1px solid var(--bd);border-radius:999px;padding:4px 10px;background:var(--row)}
-
-    /* Dialog */
-    dialog{border:none;border-radius:14px;max-width:520px;width:90%;background:var(--card);color:var(--text)}
-    dialog::backdrop{background:rgba(0,0,0,.35)}
-    .modal-head{font-weight:700;margin-bottom:8px}
-    .sr{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
-
-    /* Msg */
-    .msg{margin:8px 0;padding:8px 10px;border-radius:10px;border:1px solid}
-    .msg.ok{background:#ecfdf5;color:#166534;border-color:#bbf7d0}
-    .msg.no{background:#fef2f2;color:#991b1b;border-color:#fecaca}
-    [data-theme="dark"] .msg.ok{background:#0e2b1f;color:#8ee0bd;border-color:#1c6b4f}
-    [data-theme="dark"] .msg.no{background:#2c0c0c;color:#ffb1b1;border-color:#6b2323}
-
-    mark{background:#fff3b0;color:inherit;padding:0 .15rem;border-radius:.2rem}
-    [data-theme="dark"] mark{background:#504200}
-  </style>
+  <!-- CSS đã tách riêng -->
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/list.css?v=1">
 </head>
 <body>
 
@@ -124,7 +31,7 @@
     <a class="btn btn-ghost" href="${pageContext.request.contextPath}/request/list" id="btnRefresh" title="Làm mới (R)">⟲ Làm mới</a>
 
     <!-- Quick filter chips -->
-    <div class="chips" style="display:flex;gap:6px;flex-wrap:wrap">
+    <div class="chips">
       <span class="chip" data-quick="week">Tuần này</span>
       <span class="chip" data-quick="month">Tháng này</span>
       <span class="chip" data-quick="pending">Đang chờ</span>
@@ -191,92 +98,95 @@
       </c:if>
     </div>
 
-    <table id="reqTable" aria-describedby="tableDesc">
-      <caption id="tableDesc" class="sr">Danh sách đơn nghỉ phép</caption>
-      <thead>
-        <tr>
-          <th class="row-select">
-            <c:if test="${sessionScope.role == 'MANAGER'}">
-              <input type="checkbox" id="chkAll" title="Chọn tất cả (A)">
-            </c:if>
-          </th>
-          <th style="width:70px">ID</th>
-          <th>Nội dung</th>
-          <th>Người tạo</th>
-          <th>Khoảng thời gian</th>
-          <th>Số ngày</th>
-          <th>Trạng thái</th>
-          <th>Người xử lý</th>
-          <th style="width:250px">Thao tác</th>
-        </tr>
-      </thead>
-      <tbody>
-      <c:forEach var="r" items="${requests}">
-        <tr>
-          <td>
-            <c:if test="${sessionScope.role == 'MANAGER'}">
-              <input type="checkbox" class="rowChk" name="ids" form="bulkForm" value="${r.id}">
-            </c:if>
-          </td>
-          <td>#${r.id}</td>
-          <td title="${fn:escapeXml(r.title)}">
-            <div class="cell-reason" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${fn:escapeXml(r.reason)}
-            </div>
-          </td>
-          <td>#${r.createdBy} <c:if test="${not empty r.createdByName}">– ${r.createdByName}</c:if></td>
-          <td>
-            <c:choose>
-              <c:when test="${not empty r.startDate}">
-                <fmt:parseDate value="${r.startDate}" pattern="yyyy-MM-dd" var="sd"/>
-                <fmt:parseDate value="${r.endDate}"   pattern="yyyy-MM-dd" var="ed"/>
-                <fmt:formatDate value="${sd}" pattern="dd/MM/yyyy"/> – <fmt:formatDate value="${ed}" pattern="dd/MM/yyyy"/>
-              </c:when>
-              <c:otherwise>—</c:otherwise>
-            </c:choose>
-          </td>
-          <td>
-            <c:if test="${not empty r.startDate}">
-              <fmt:parseDate value="${r.startDate}" pattern="yyyy-MM-dd" var="sd2"/>
-              <fmt:parseDate value="${r.endDate}"   pattern="yyyy-MM-dd" var="ed2"/>
-              <c:set var="days" value="${(ed2.time - sd2.time) / (1000*60*60*24) + 1}" />
-              ${days}
-            </c:if>
-          </td>
-          <td>
-            <span class="pill ${fn:toUpperCase(r.status)}">
+    <!-- cuộn ngang mượt trên mobile -->
+    <div class="table-scroll">
+      <table id="reqTable" aria-describedby="tableDesc">
+        <caption id="tableDesc" class="sr">Danh sách đơn nghỉ phép</caption>
+        <thead>
+          <tr>
+            <th class="row-select">
+              <c:if test="${sessionScope.role == 'MANAGER'}">
+                <input type="checkbox" id="chkAll" title="Chọn tất cả (A)">
+              </c:if>
+            </th>
+            <th style="width:70px">ID</th>
+            <th>Nội dung</th>
+            <th>Người tạo</th>
+            <th>Khoảng thời gian</th>
+            <th>Số ngày</th>
+            <th>Trạng thái</th>
+            <th>Người xử lý</th>
+            <th style="width:250px">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+        <c:forEach var="r" items="${requests}">
+          <tr>
+            <td>
+              <c:if test="${sessionScope.role == 'MANAGER'}">
+                <input type="checkbox" class="rowChk" name="ids" form="bulkForm" value="${r.id}">
+              </c:if>
+            </td>
+            <td>#${r.id}</td>
+            <td title="${fn:escapeXml(r.title)}">
+              <div class="cell-reason">
+                ${fn:escapeXml(r.reason)}
+              </div>
+            </td>
+            <td>#${r.createdBy} <c:if test="${not empty r.createdByName}">– ${r.createdByName}</c:if></td>
+            <td>
               <c:choose>
-                <c:when test="${fn:toUpperCase(r.status)=='PENDING'}">⏳</c:when>
-                <c:when test="${fn:toUpperCase(r.status)=='APPROVED'}">✅</c:when>
-                <c:when test="${fn:toUpperCase(r.status)=='REJECTED'}">⛔</c:when>
-                <c:otherwise>🗑</c:otherwise>
+                <c:when test="${not empty r.startDate}">
+                  <fmt:parseDate value="${r.startDate}" pattern="yyyy-MM-dd" var="sd"/>
+                  <fmt:parseDate value="${r.endDate}"   pattern="yyyy-MM-dd" var="ed"/>
+                  <fmt:formatDate value="${sd}" pattern="dd/MM/yyyy"/> – <fmt:formatDate value="${ed}" pattern="dd/MM/yyyy"/>
+                </c:when>
+                <c:otherwise>—</c:otherwise>
               </c:choose>
-              ${fn:toUpperCase(r.status)}
-            </span>
-          </td>
-          <td>
-            <c:if test="${not empty r.processedBy}">#${r.processedBy} <c:if test="${not empty r.processedByName}">– ${r.processedByName}</c:if></c:if>
-            <c:if test="${empty r.processedBy}"><span class="muted">—</span></c:if>
-          </td>
-          <td class="table-actions">
-            <a class="btn-icon" href="${pageContext.request.contextPath}/request/detail?id=${r.id}" title="Xem">Xem</a>
-            <c:if test="${sessionScope.role == 'MANAGER' && fn:toLowerCase(r.status) == 'pending'}">
-              <button class="btn-icon ok" data-open-approve data-id="${r.id}" title="Duyệt">Duyệt</button>
-              <button class="btn-icon warn" data-open-reject data-id="${r.id}" title="Từ chối">Từ chối</button>
-            </c:if>
-            <c:if test="${fn:toLowerCase(r.status) == 'pending' && r.createdBy == sessionScope.userId}">
-              <a class="btn-icon danger" href="#" data-cancel data-id="${r.id}" title="Hủy">Hủy</a>
-            </c:if>
-            <a class="btn-icon" href="${pageContext.request.contextPath}/request/duplicate?id=${r.id}" title="Nhân bản">Nhân bản</a>
-          </td>
-        </tr>
-      </c:forEach>
+            </td>
+            <td>
+              <c:if test="${not empty r.startDate}">
+                <fmt:parseDate value="${r.startDate}" pattern="yyyy-MM-dd" var="sd2"/>
+                <fmt:parseDate value="${r.endDate}"   pattern="yyyy-MM-dd" var="ed2"/>
+                <c:set var="days" value="${(ed2.time - sd2.time) / (1000*60*60*24) + 1}" />
+                ${days}
+              </c:if>
+            </td>
+            <td>
+              <span class="pill ${fn:toUpperCase(r.status)}">
+                <c:choose>
+                  <c:when test="${fn:toUpperCase(r.status)=='PENDING'}">⏳</c:when>
+                  <c:when test="${fn:toUpperCase(r.status)=='APPROVED'}">✅</c:when>
+                  <c:when test="${fn:toUpperCase(r.status)=='REJECTED'}">⛔</c:when>
+                  <c:otherwise>🗑</c:otherwise>
+                </c:choose>
+                ${fn:toUpperCase(r.status)}
+              </span>
+            </td>
+            <td>
+              <c:if test="${not empty r.processedBy}">#${r.processedBy} <c:if test="${not empty r.processedByName}">– ${r.processedByName}</c:if></c:if>
+              <c:if test="${empty r.processedBy}"><span class="muted">—</span></c:if>
+            </td>
+            <td class="table-actions">
+              <a class="btn-icon" href="${pageContext.request.contextPath}/request/detail?id=${r.id}" title="Xem">Xem</a>
+              <c:if test="${sessionScope.role == 'MANAGER' && fn:toLowerCase(r.status) == 'pending'}">
+                <button class="btn-icon ok" data-open-approve data-id="${r.id}" title="Duyệt">Duyệt</button>
+                <button class="btn-icon warn" data-open-reject data-id="${r.id}" title="Từ chối">Từ chối</button>
+              </c:if>
+              <c:if test="${fn:toLowerCase(r.status) == 'pending' && r.createdBy == sessionScope.userId}">
+                <a class="btn-icon danger" href="#" data-cancel data-id="${r.id}" title="Hủy">Hủy</a>
+              </c:if>
+              <a class="btn-icon" href="${pageContext.request.contextPath}/request/duplicate?id=${r.id}" title="Nhân bản">Nhân bản</a>
+            </td>
+          </tr>
+        </c:forEach>
 
-      <c:if test="${empty requests}">
-        <tr><td colspan="9" class="empty">Không có dữ liệu phù hợp bộ lọc.</td></tr>
-      </c:if>
-      </tbody>
-    </table>
+        <c:if test="${empty requests}">
+          <tr><td colspan="9" class="empty">Không có dữ liệu phù hợp bộ lọc.</td></tr>
+        </c:if>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Bulk sticky bar -->
     <c:if test="${sessionScope.role == 'MANAGER'}">
@@ -525,11 +435,9 @@
     if(!term) return;
     var cells = document.querySelectorAll('.cell-reason');
     var re = null;
-try {
-  re = new RegExp('(' + term.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&') + ')', 'ig');
-} catch(e) {
-  return;
-}
+    try {
+      re = new RegExp('(' + term.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&') + ')', 'ig');
+    } catch(e) { return; }
     cells.forEach(function(c){
       var txt = c.textContent || '';
       var html = txt.replace(re, '<mark>$1</mark>');
