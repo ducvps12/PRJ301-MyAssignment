@@ -7,68 +7,28 @@
   <meta charset="UTF-8">
   <title>Tạo đơn nghỉ phép</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
 
-  <style>
-    :root{
-      --bg:#f7f7f8; --card:#fff; --bd:#e5e7eb; --muted:#6b7280; --txt:#111827;
-      --primary:#1a73e8; --primary-600:#1664c7; --ok:#0b65c2; --err:#b91c1c;
-      --ring:#93c5fd; --shadow:0 2px 10px rgba(0,0,0,.06);
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt)}
-    .wrap{max-width:760px;margin:32px auto;padding:0 16px}
-    .page-title{display:flex;align-items:center;gap:10px;margin:0 0 16px}
-    .page-title .badge{font-size:12px;background:#eef2f7;border:1px solid var(--bd);border-radius:999px;padding:4px 10px;color:#374151}
-    .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;box-shadow:var(--shadow);padding:20px}
-    h2{margin:0 0 4px}
-    .sub{margin:0 0 16px;color:var(--muted);font-size:13px}
-    label{display:block;font-weight:600;margin-top:12px;margin-bottom:6px}
-    .req{color:var(--err)}
-    .field{position:relative}
-    input[type="text"], input[type="date"], textarea{
-      width:100%;padding:11px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff;
-      transition:border-color .15s, box-shadow .15s;
-    }
-    input:focus, textarea:focus{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px rgba(147,197,253,.45)}
-    textarea{min-height:120px;resize:vertical}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media (max-width:640px){ .row{grid-template-columns:1fr} }
-    .actions{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
-    .btn{padding:10px 14px;border:1px solid transparent;border-radius:10px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:8px}
-    .btn:disabled{opacity:.65;cursor:not-allowed}
-    .btn-primary{background:var(--primary);color:#fff}
-    .btn-primary:hover{background:var(--primary-600)}
-    .btn-muted{background:#eef2f7;color:#111;border-color:#e5e7eb}
-    .btn-ghost{background:transparent;border-color:var(--bd);color:#111}
-    .alert{padding:10px 12px;border-radius:10px;margin-bottom:12px;border:1px solid}
-    .alert-error{background:#fde8e8;border-color:#fecaca;color:var(--err)}
-    .alert-ok{background:#e7f5ff;border-color:#b6e0fe;color:var(--ok)}
-    small.muted{color:var(--muted)}
-    .hint{font-size:12px;color:var(--muted);margin-top:6px}
-    .counter{position:absolute;right:10px;bottom:8px;font-size:12px;color:var(--muted)}
-    .inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
-    .quick .chip{border:1px solid var(--bd);background:#fafafa;border-radius:999px;padding:6px 10px;font-size:12px;cursor:pointer}
-    .kpi{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
-    .kpi .pill{background:#f1f5f9;border:1px solid var(--bd);border-radius:999px;padding:6px 10px;font-size:12px}
-    .error-text{color:var(--err);font-size:12px;margin-top:6px;display:none}
-    .show{display:block}
-    /* Modal preview */
-    .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.4);padding:16px;z-index:50}
-    .modal.open{display:grid}
-    .modal .sheet{max-width:640px;width:100%;background:#fff;border-radius:14px;border:1px solid var(--bd);box-shadow:var(--shadow);padding:18px}
-    .sheet h3{margin:0 0 8px}
-    .sheet .grid{display:grid;grid-template-columns:140px 1fr;gap:8px}
-    .sheet .grid div{padding:6px 0;border-bottom:1px dashed #e5e7eb}
-    .spinner{width:16px;height:16px;border-radius:50%;border:2px solid #fff;border-top-color:transparent;animation:spin .9s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    /* Toast */
-    .toast{position:fixed;right:14px;bottom:14px;display:none;background:#111827;color:#fff;padding:10px 12px;border-radius:10px;box-shadow:var(--shadow);font-size:13px}
-    .toast.show{display:block}
-  </style>
+  <!-- CSS đã tách riêng -->
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/create.css">
+ 
 </head>
 <body>
+    <%@ include file="/WEB-INF/views/common/_header.jsp" %>
+    <style>
+  /* Buộc hiện vùng actions + nút */
+  .actions{display:flex !important; gap:8px; margin-top:12px}
+  .btn{display:inline-flex !important; align-items:center; gap:6px;
+       padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px;
+       background:#111827; color:#fff}
+  .btn-ghost,.btn-muted{background:#fff; color:#111827}
+
+  /* Modal mặc định ẩn, chỉ hiện khi có .open */
+  .modal{display:none}
+  .modal.open{display:flex}
+</style>
+
+    
   <div class="wrap">
     <div class="page-title">
       <h2 style="margin:0">Tạo đơn nghỉ phép</h2>
@@ -382,4 +342,7 @@
     })();
   </script>
 </body>
+
+<%@ include file="/WEB-INF/views/common/_footer.jsp" %>
+
 </html>

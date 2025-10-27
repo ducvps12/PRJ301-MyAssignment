@@ -10,25 +10,47 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 
-@WebServlet(name = "RequestApproveServlet", urlPatterns = {"/request/approve"})
+@WebServlet(name = "RequestApproveServlet",
+            urlPatterns = {"/request/approve", "/request/approve/*"})
 public class RequestApproveServlet extends HttpServlet {
+
     private final RequestDAO requestDAO = new RequestDAO();
     private final ActivityDAO activityDAO = new ActivityDAO();
 
-    // --- Helpers ---
+    // ---- Helpers ------------------------------------------------------------
+
     private boolean hasApproveRole(User u) {
         if (u == null) return false;
         String role = u.getRole();
-        return "ADMIN".equals(role) || "DIV_LEADER".equals(role) || "TEAM_LEAD".equals(role);
+        return "ADMIN".equals(role) || "DIV_LEAD".equals(role) || "LEAD".equals(role);
     }
 
-    private void requireLogin(User u, HttpServletResponse resp, HttpServletRequest req) throws IOException {
-        if (u == null) {
-            resp.sendRedirect(req.getContextPath() + "/login?next=" + req.getRequestURI() + (req.getQueryString() != null ? ("?" + req.getQueryString()) : ""));
-        }
+    /** true nếu đã redirect về login (caller nên return). */
+    private boolean requireLogin(User u, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (u != null) return false;
+        String nextRaw = req.getRequestURI() + (req.getQueryString() != null ? ("?" + req.getQueryString()) : "");
+        String next = URLEncoder.encode(nextRaw, StandardCharsets.UTF_8);
+        String url = resp.encodeRedirectURL(req.getContextPath() + "/login?next=" + next);
+        resp.sendRedirect(url);
+        return true;
     }
+
+    /** Đọc id từ ?id= hoặc /approve/{id}; trả về null nếu không hợp lệ. */
+    private Integer readId(HttpServletRequest req) {
+        String idRaw = req.getParameter("id");
+        if (idRaw == null) {
+            String pi = req.getPathInfo(); // ví dụ "/123"
+            if (pi != null && pi.length() > 1) idRaw = pi.substring(1);
+        }
+        if (idRaw == null || !idRaw.matches("\\d+")) return null;
+        try { return Integer.valueOf(idRaw); } catch (Exception ignore) { return null; }
+    }
+
+    // ---- GET: hiển thị trang duyệt -----------------------------------------
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -37,48 +59,28 @@ public class RequestApproveServlet extends HttpServlet {
         HttpSession s = req.getSession(false);
         User me = (s != null) ? (User) s.getAttribute("currentUser") : null;
 
-        // Chưa đăng nhập -> chuyển về login
-        if (me == null) {
-            requireLogin(null, resp, req);
-            return;
-        }
+        if (requireLogin(me, req, resp)) return;
+        if (!hasApproveRole(me)) { resp.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
 
-        // Sai quyền
-        if (!hasApproveRole(me)) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN);
-            return;
-        }
-
-        // Lấy id
-        String idRaw = req.getParameter("id");
-        int id;
-        try {
-            id = Integer.parseInt(idRaw);
-        } catch (Exception e) {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid request id");
-            return;
-        }
+        Integer id = readId(req);
+        if (id == null) { resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid request id"); return; }
 
         try {
             Request r = requestDAO.findById(id);
-            if (r == null) {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Request not found");
-                return;
-            }
-
-            // Phạm vi duyệt: ADMIN duyệt tất; DIV_LEADER duyệt cùng division; TEAM_LEAD duyệt team mình
-            // -> uỷ thác cho DAO check (tùy bạn hiện thực)
+            if (r == null) { resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Request not found"); return; }
             if (!requestDAO.isAllowedToApprove(me, r)) {
-                resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Out of your approval scope");
-                return;
+                resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Out of your approval scope"); return;
             }
 
-            req.setAttribute("reqItem", r);
+            req.setAttribute("requestItem", r); // khớp approve.jsp
             req.getRequestDispatcher("/WEB-INF/views/request/approve.jsp").forward(req, resp);
+
         } catch (SQLException e) {
             throw new ServletException(e);
         }
     }
+
+    // ---- POST: xử lý quyết định --------------------------------------------
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
@@ -88,76 +90,39 @@ public class RequestApproveServlet extends HttpServlet {
 
         HttpSession s = req.getSession(false);
         User me = (s != null) ? (User) s.getAttribute("currentUser") : null;
-        if (me == null) {
-            requireLogin(null, resp, req);
-            return;
-        }
-        if (!hasApproveRole(me)) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN);
-            return;
-        }
 
-        // Params
+        if (requireLogin(me, req, resp)) return;
+        if (!hasApproveRole(me)) { resp.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+
         String action = req.getParameter("action"); // approve | reject
         String note   = req.getParameter("note");
-        String idRaw  = req.getParameter("id");
+        Integer id    = readId(req);
+        if (id == null) { resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid request id"); return; }
 
-        int id;
-        try {
-            id = Integer.parseInt(idRaw);
-        } catch (Exception e) {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid request id");
-            return;
-        }
-
-        String newStatus;
-        if ("approve".equalsIgnoreCase(action)) {
-            newStatus = "APPROVED";
-        } else if ("reject".equalsIgnoreCase(action)) {
-            newStatus = "REJECTED";
-        } else {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid action");
-            return;
-        }
+        String newStatus = "approve".equalsIgnoreCase(action) ? "APPROVED"
+                         : "reject".equalsIgnoreCase(action)  ? "REJECTED" : null;
+        if (newStatus == null) { resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid action"); return; }
 
         try {
             Request r = requestDAO.findById(id);
-            if (r == null) {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Request not found");
-                return;
-            }
-
+            if (r == null) { resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Request not found"); return; }
             if (!requestDAO.isAllowedToApprove(me, r)) {
-                resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Out of your approval scope");
-                return;
+                resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Out of your approval scope"); return;
             }
 
-            // Chỉ xử lý khi đang PENDING (tránh duyệt trùng)
-            boolean ok = requestDAO.updateStatusIfPending(
-                    id,
-                    newStatus,
-                    me.getId(),
-                    note
-            );
+            // Chỉ cập nhật khi đang PENDING
+            boolean ok = requestDAO.updateStatusIfPending(id, newStatus, me.getId(), note);
 
-            // Ghi activity (dù ok hay không, nhưng nội dung khác nhau)
+            // Log activity
             String ip = WebUtil.clientIp(req);
             String ua = WebUtil.userAgent(req);
-            String actionName = "APPROVE_REQUEST";
-            if ("REJECTED".equals(newStatus)) actionName = "REJECT_REQUEST";
+            String actionName = "REJECTED".equals(newStatus) ? "REJECT_REQUEST" : "APPROVE_REQUEST";
 
-            activityDAO.log(
-                    me.getId(),
-                    actionName,
-                    "REQUEST",
-                    id,
-                    (ok ? ("Processed " + newStatus) : ("Skip: not PENDING")),
-                    ip,
-                    ua
-            );
+            activityDAO.log(me.getId(), actionName, "REQUEST", id,
+                    ok ? ("Processed " + newStatus) : "Skip: not PENDING", ip, ua);
 
             String qs = ok ? "msg=processed" : "msg=not_pending";
-            resp.sendRedirect(req.getContextPath() + "/request/list?" + qs);
+            resp.sendRedirect(resp.encodeRedirectURL(req.getContextPath() + "/request/list?" + qs));
 
         } catch (SQLException e) {
             throw new ServletException(e);

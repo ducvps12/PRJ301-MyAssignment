@@ -168,7 +168,12 @@
               <c:if test="${empty r.processedBy}"><span class="muted">—</span></c:if>
             </td>
             <td class="table-actions">
-              <a class="btn-icon" href="${pageContext.request.contextPath}/request/detail?id=${r.id}" title="Xem">Xem</a>
+<a class="btn-icon" title="Xem"
+   href="<c:url value='/request/detail'>
+            <c:param name='id' value='${r.id}'/>
+         </c:url>">Xem</a>
+
+
               <c:if test="${sessionScope.role == 'MANAGER' && fn:toLowerCase(r.status) == 'pending'}">
                 <button class="btn-icon ok" data-open-approve data-id="${r.id}" title="Duyệt">Duyệt</button>
                 <button class="btn-icon warn" data-open-reject data-id="${r.id}" title="Từ chối">Từ chối</button>

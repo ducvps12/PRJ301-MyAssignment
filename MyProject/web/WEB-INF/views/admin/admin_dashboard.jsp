@@ -1,153 +1,120 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
 <%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
-<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
 
-<%@ include file="/WEB-INF/views/common/_header.jsp" %>
+<%@ include file="/WEB-INF/views/admin/_admin_header.jsp" %>
+<%@ include file="/WEB-INF/views/admin/_admin_sidebar.jsp" %>
 
-<div class="container" style="max-width:1100px; margin:24px auto;">
-
-  <h2 style="margin:0 0 6px 0;">Admin Dashboard</h2>
-  <div class="muted" style="margin-bottom:16px">
-    Department view:
-    <strong>${viewDepartment}</strong>
+<div class="main">
+  <div class="topbar">
+    <button class="btn" onclick="toggleSidebar()">☰</button>
+    <div class="muted">View: <span class="pill">${viewDepartment}</span></div>
+    <a class="btn" href="${pageContext.request.contextPath}/logout">Đăng xuất</a>
   </div>
 
-  <c:if test="${not empty statsError}">
-    <div style="color:#b91c1c; background:#fef2f2; padding:8px 12px; border-radius:6px; margin-bottom:12px;">
-      ⚠ ${statsError}
-    </div>
-  </c:if>
+  <div class="content">
+    <h2 style="margin:0 0 8px">Admin Dashboard</h2>
+    <div class="muted" style="margin-bottom:14px">Tổng quan tình hình nghỉ phép</div>
 
-  <!-- === KPI CARDS === -->
-  <div class="kpi-grid">
-    <div class="card kpi">
-      <div class="kpi-title">Đơn chờ duyệt</div>
-      <div class="kpi-number">${kpis.pendingAll}</div>
-    </div>
-    <div class="card kpi">
-      <div class="kpi-title">Đơn duyệt trong tháng</div>
-      <div class="kpi-number">${kpis.approvedThisMonth}</div>
-    </div>
-    <div class="card kpi">
-      <div class="kpi-title">Tổng đơn trong tháng</div>
-      <div class="kpi-number">${kpis.totalThisMonth}</div>
-    </div>
-    <div class="card kpi">
-      <div class="kpi-title">Tỷ lệ duyệt 30 ngày</div>
-      <div class="kpi-number">
-        <fmt:formatNumber value="${kpis.approvalRate30d}" maxFractionDigits="1" />%
+    <!-- KPI -->
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Đang chờ duyệt</h3>
+        <div class="num">${kpis.pendingAll}</div>
+      </div>
+      <div class="card">
+        <h3>Đã duyệt trong tháng</h3>
+        <div class="num">${kpis.approvedThisMonth}</div>
+      </div>
+      <div class="card">
+        <h3>Tổng đơn trong tháng</h3>
+        <div class="num">${kpis.totalThisMonth}</div>
+      </div>
+      <div class="card">
+        <h3>Tỉ lệ duyệt 30 ngày</h3>
+        <div class="num">
+          <fmt:formatNumber value="${kpis.approvalRate30d}" maxFractionDigits="1"/>%
+        </div>
+        <div class="muted" style="font-size:12px">Base: ${kpis.approvalBase30d}</div>
       </div>
     </div>
-  </div>
 
-  <!-- === NHÂN SỰ ĐANG NGHỈ HÔM NAY === -->
-  <div class="card" style="margin-top:18px;">
-    <div class="card-header">Nhân sự đang nghỉ hôm nay</div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Họ tên</th>
-            <th>Phòng</th>
-            <th>Từ</th>
-            <th>Đến</th>
-            <th>Số ngày</th>
-          </tr>
-        </thead>
-        <tbody>
-          <c:forEach var="t" items="${todayOnLeave}">
-            <tr>
-              <td>${t.requester}</td>
-              <td>${t.department}</td>
-              <td><fmt:formatDate value="${t.startDate}" pattern="dd/MM/yyyy" /></td>
-              <td><fmt:formatDate value="${t.endDate}" pattern="dd/MM/yyyy" /></td>
-              <td>${t.days}</td>
-            </tr>
-          </c:forEach>
-
-          <c:if test="${empty todayOnLeave}">
-            <tr><td colspan="5" class="empty">Không có ai đang nghỉ hôm nay</td></tr>
-          </c:if>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- === ĐƠN NGHỈ MỚI NHẤT === -->
-  <div class="card" style="margin-top:18px;">
-    <div class="card-header">
-      Đơn nghỉ mới nhất
-      <a href="${pageContext.request.contextPath}/request/list" class="btn small">Tới danh sách</a>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
+    <div class="grid">
+      <!-- Recent requests -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0;color:var(--tx)">Đơn gần đây</h3>
+          <a class="pill" href="${pageContext.request.contextPath}/request/list">Xem tất cả →</a>
+        </div>
+        <table class="table">
+          <thead>
           <tr>
             <th>#</th>
-            <th>Nội dung</th>
-            <th>Từ</th>
-            <th>Đến</th>
+            <th>Tiêu đề</th>
             <th>Người tạo</th>
-            <th>Phòng</th>
+            <th>Phòng ban</th>
+            <th>Ngày</th>
             <th>Trạng thái</th>
+            <th>Ngày tạo</th>
           </tr>
-        </thead>
-        <tbody>
+          </thead>
+          <tbody>
           <c:forEach var="r" items="${recentRequests}">
-            <c:set var="st" value="${fn:toUpperCase(r.status)}" />
             <tr>
-              <td>#${r.id}</td>
-              <td>${r.title}</td>
-              <td><fmt:formatDate value="${r.startDate}" pattern="dd/MM/yyyy" /></td>
-              <td><fmt:formatDate value="${r.endDate}" pattern="dd/MM/yyyy" /></td>
+              <td>${r.id}</td>
+              <td><a href="${pageContext.request.contextPath}/request/detail?id=${r.id}">${r.title}</a></td>
               <td>${r.requester}</td>
               <td>${r.department}</td>
               <td>
-                <span class="badge
-                  <c:if test='${st eq "PENDING"}'>is-pending</c:if>
-                  <c:if test='${st eq "APPROVED"}'>is-approved</c:if>
-                  <c:if test='${st eq "REJECTED"}'>is-rejected</c:if>">
-                  ${st}
-                </span>
+                <fmt:formatDate value="${r.startDate}" pattern="dd/MM"/>–<fmt:formatDate value="${r.endDate}" pattern="dd/MM"/>
+                <span class="pill" style="margin-left:6px">${r.days}d</span>
               </td>
+              <td><span class="status ${r.status}">${r.status}</span></td>
+              <td><fmt:formatDate value="${r.createdAt}" pattern="dd/MM HH:mm"/></td>
             </tr>
           </c:forEach>
-
           <c:if test="${empty recentRequests}">
-            <tr><td colspan="7" class="empty">Chưa có dữ liệu</td></tr>
+            <tr><td colspan="7" class="muted">Chưa có dữ liệu</td></tr>
           </c:if>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Today on leave -->
+      <div class="card">
+        <h3 style="margin:0 0 10px 0;color:var(--tx)">Nghỉ hôm nay</h3>
+        <c:choose>
+          <c:when test="${empty todayOnLeave}">
+            <div class="muted">Không có ai nghỉ hôm nay.</div>
+          </c:when>
+          <c:otherwise>
+            <table class="table">
+              <thead>
+              <tr>
+                <th>Nhân sự</th>
+                <th>Phòng ban</th>
+                <th>Từ</th>
+                <th>Đến</th>
+                <th>Số ngày</th>
+              </tr>
+              </thead>
+              <tbody>
+              <c:forEach var="t" items="${todayOnLeave}">
+                <tr>
+                  <td>${t.requester}</td>
+                  <td>${t.department}</td>
+                  <td><fmt:formatDate value="${t.startDate}" pattern="dd/MM"/></td>
+                  <td><fmt:formatDate value="${t.endDate}" pattern="dd/MM"/></td>
+                  <td>${t.days}</td>
+                </tr>
+              </c:forEach>
+              </tbody>
+            </table>
+          </c:otherwise>
+        </c:choose>
+      </div>
     </div>
   </div>
-
 </div>
 
-<!-- === STYLE === -->
-<style>
-  .muted{color:#6b7280;font-size:13px}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .card-header{padding:12px 16px;border-bottom:1px solid #f0f1f3;display:flex;justify-content:space-between;align-items:center;font-weight:600}
-  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-  .kpi{padding:16px}
-  .kpi-title{font-size:13px;color:#6b7280}
-  .kpi-number{font-size:28px;font-weight:700;margin-top:6px}
-  .table-wrap{overflow:auto}
-  .table{width:100%;border-collapse:collapse}
-  .table th,.table td{padding:10px 12px;border-bottom:1px solid #f3f4f6;text-align:left}
-  .btn.small{font-size:12px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none}
-  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid #e5e7eb}
-  .badge.is-pending{background:#fff7ed;color:#b45309}
-  .badge.is-approved{background:#ecfeff;color:#0369a1}
-  .badge.is-rejected{background:#fef2f2;color:#b91c1c}
-  .empty{text-align:center;opacity:.7;padding:12px 0}
-  @media(max-width:900px){
-    .container{padding:0 12px}
-    .kpi-number{font-size:22px}
-    .kpi-grid{grid-template-columns:repeat(2,1fr)}
-  }
-</style>
-
-<%@ include file="/WEB-INF/views/common/_footer.jsp" %>
-c
+<%@ include file="/WEB-INF/views/admin/_admin_footer.jsp" %>

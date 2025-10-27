@@ -34,7 +34,7 @@
     @media (max-width:720px){ .grid{grid-template-columns:1fr} }
 
     .kv{display:flex;gap:8px}
-    .kv b{min-width:120px}
+    .kv b{min-width:140px}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 
     .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
@@ -67,6 +67,13 @@
     .modal{padding:18px 18px 12px}
     .modal .row{margin-top:10px}
     textarea{width:100%;min-height:110px;border:1px solid var(--b);border-radius:12px;padding:10px;font:inherit}
+
+    /* Print */
+    @media print{
+      .topbar,.actions,.btn,.toast,dialog{display:none !important}
+      .card{box-shadow:none;border:none}
+      body{background:#fff}
+    }
   </style>
 </head>
 <body>
@@ -80,11 +87,11 @@
       Chi tiết
     </div>
     <div class="actions">
-      <button class="btn btn-icon tip" id="copyLinkBtn" aria-label="Copy link">
+      <button class="btn btn-icon tip" id="copyLinkBtn" aria-label="Copy link" title="Copy link (Ctrl+C)">
         🔗
         <span class="tiptext">Sao chép liên kết</span>
       </button>
-      <button class="btn btn-icon tip" id="printBtn" aria-label="In">
+      <button class="btn btn-icon tip" id="printBtn" aria-label="In" title="In (P)">
         🖨️
         <span class="tiptext">In (phím P)</span>
       </button>
@@ -103,16 +110,21 @@
         </c:choose>
       </span>
       <c:if test="${not empty param.msg}">
-        <span class="chip">Cập nhật: ${param.msg}</span>
+        <span class="chip">Cập nhật: <c:out value='${param.msg}'/></span>
       </c:if>
     </div>
 
-    <div class="muted" style="margin-top:6px">Người tạo: ${r.createdByName}</div>
+    <div class="muted" style="margin-top:6px">Người tạo: <c:out value='${r.createdByName}'/></div>
 
     <div class="grid" style="margin-top:12px">
       <div class="kv">
         <b>Tiêu đề:</b>
-        <span>${fn:escapeXml(r.title)}<c:if test="${empty r.title}"><span class="muted"> (không có)</span></c:if></span>
+        <span>
+          <c:choose>
+            <c:when test="${not empty r.title}"><c:out value='${r.title}'/></c:when>
+            <c:otherwise><span class="muted">(không có)</span></c:otherwise>
+          </c:choose>
+        </span>
       </div>
 
       <div class="kv">
@@ -131,27 +143,39 @@
             </c:when>
             <c:otherwise>—</c:otherwise>
           </c:choose>
+          <c:if test="${r.days gt 0}">
+            &nbsp;<span class="chip"><fmt:formatNumber value="${r.days}" maxFractionDigits="1"/> ngày</span>
+          </c:if>
         </span>
       </div>
 
+      <c:if test="${not empty r.leaveTypeName}">
+        <div class="kv">
+          <b>Loại nghỉ:</b>
+          <span><c:out value='${r.leaveTypeName}'/></span>
+        </div>
+      </c:if>
+
       <div style="grid-column:1/-1" class="kv">
         <b>Lý do:</b>
-        <div>${fn:escapeXml(r.reason)}</div>
+        <div><c:out value='${r.reason}'/></div>
       </div>
 
       <c:if test="${not empty r.managerNote}">
         <div style="grid-column:1/-1" class="kv">
           <b>Ghi chú quản lý:</b>
-          <div class="note" style="background:#fbfafa">${fn:escapeXml(r.managerNote)}</div>
+          <div class="note" style="background:#fbfafa"><c:out value='${r.managerNote}'/></div>
         </div>
       </c:if>
 
       <c:if test="${r.hasAttachment}">
         <div style="grid-column:1/-1" class="kv">
           <b>Tệp đính kèm:</b>
-          <div>📎 ${fn:escapeXml(r.attachmentName)}
-            <!-- Nếu có URL tải, thay # bằng link -->
-            <a class="btn" style="padding:4px 8px;margin-left:8px" href="#" target="_blank">Tải xuống</a>
+          <div>
+            📎 <c:out value='${r.attachmentName}'/>
+            <c:if test="${not empty r.attachmentUrl}">
+              <a class="btn" style="padding:4px 8px;margin-left:8px" href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
+            </c:if>
           </div>
         </div>
       </c:if>
@@ -161,11 +185,15 @@
     <div class="actions">
       <a class="btn" href="${pageContext.request.contextPath}/request/list">← Quay lại danh sách</a>
 
-      <c:if test="${sessionScope.user.roleCode eq 'MANAGER' && r.status eq 'INPROGRESS'}">
+      <c:if test="${not empty sessionScope.user
+                   and sessionScope.user.roleCode eq 'MANAGER'
+                   and r.status eq 'INPROGRESS'}">
         <a class="btn btn-primary" href="${pageContext.request.contextPath}/request/approve?id=${r.id}">Duyệt / Từ chối</a>
       </c:if>
 
-      <c:if test="${sessionScope.user.userId == r.createdBy && r.status eq 'INPROGRESS'}">
+      <c:if test="${not empty sessionScope.user
+                   and sessionScope.user.userId == r.createdBy
+                   and r.status eq 'INPROGRESS'}">
         <button class="btn btn-danger" id="openCancel">Hủy yêu cầu</button>
       </c:if>
     </div>
@@ -178,13 +206,13 @@
       <c:forEach var="h" items="${r.history}">
         <li>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="tag">${h.action}</span>
+            <span class="tag"><c:out value='${h.action}'/></span>
             <span class="muted">
-              <fmt:formatDate value="${h.actedAt}" pattern="dd/MM/yyyy HH:mm"/> • ${h.actedByName}
+              <fmt:formatDate value="${h.actedAt}" pattern="dd/MM/yyyy HH:mm"/> • <c:out value='${h.actedByName}'/>
             </span>
           </div>
           <c:if test="${not empty h.note}">
-            <div class="note">${fn:escapeXml(h.note)}</div>
+            <div class="note"><c:out value='${h.note}'/></div>
           </c:if>
         </li>
       </c:forEach>

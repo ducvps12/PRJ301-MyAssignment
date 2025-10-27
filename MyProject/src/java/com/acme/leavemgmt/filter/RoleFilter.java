@@ -9,6 +9,15 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * RoleFilter – Bảo vệ khu vực admin & page duyệt
+ * Quy ước:
+ *  - ADMIN: full quyền /admin/*
+ *  - LEADER (DIV_LEADER/TEAM_LEAD/QA_LEAD/...): /admin/div*, /request/approve*
+ *  - STAFF: không vào /admin/*
+ *
+ * Ghi chú: web.xml đang metadata-complete=true ⇒ @WebFilter bị ignore, mapping dùng web.xml.
+ */
 @WebFilter(
     filterName = "RoleFilter",
     urlPatterns = { "/admin", "/admin/*", "/request/approve", "/request/approve/*" }
@@ -25,68 +34,75 @@ public class RoleFilter implements Filter {
     HttpServletRequest  r = (HttpServletRequest) req;
     HttpServletResponse w = (HttpServletResponse) res;
 
-    // Preflight cho CORS
+    // 0) Cho preflight qua
     if ("OPTIONS".equalsIgnoreCase(r.getMethod())) {
       chain.doFilter(req, res);
       return;
     }
 
-    // ==== 1) Bắt buộc đăng nhập ====
+    final String ctx  = r.getContextPath();                   // vd: /MyProject
+    final String uri  = r.getRequestURI();                    // vd: /MyProject/admin/users
+    String path = uri.substring(ctx.length());
+    if (path.length() > 1 && path.endsWith("/")) path = path.substring(0, path.length()-1);
+
+    // 1) Bỏ qua tài nguyên tĩnh & trang lỗi/health
+    if (path.startsWith("/assets/") || path.startsWith("/static/")
+        || path.startsWith("/favicon") || path.startsWith("/robots.txt")
+        || path.equals("/__health")
+        || path.startsWith("/WEB-INF/views/errors/")) {
+      chain.doFilter(req, res);
+      return;
+    }
+
+    // 2) Bắt buộc đăng nhập
     HttpSession session = r.getSession(false);
     User me = (session != null) ? (User) session.getAttribute("currentUser") : null;
 
     if (me == null) {
-      String nextRaw = r.getRequestURI() + (r.getQueryString() != null ? "?" + r.getQueryString() : "");
+      String nextRaw = uri + (r.getQueryString() != null ? "?" + r.getQueryString() : "");
       String next = URLEncoder.encode(nextRaw, StandardCharsets.UTF_8.name());
-      // Dùng session-scope flash vì redirect
+
+      if (wantsJson(r)) {
+        w.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        w.setContentType("application/json; charset=UTF-8");
+        w.getWriter().write("{\"error\":\"UNAUTHORIZED\",\"message\":\"Vui lòng đăng nhập.\",\"next\":\"" + escapeJson(nextRaw) + "\"}");
+        return;
+      }
+
       r.getSession(true).setAttribute("flash", new Flash("warn", "Vui lòng đăng nhập để tiếp tục."));
-      w.sendRedirect(r.getContextPath() + "/login?next=" + next);
+      w.sendRedirect(ctx + "/login?next=" + next);
       return;
     }
 
-    // ==== 2) Xác định role & path ====
-    String role = safeUpper(me.getRole());
-    String ctx  = r.getContextPath();
-    String path = normalizePath(r.getRequestURI().substring(ctx.length())); // vd: /admin/div
-
-    boolean isAdmin    = "ADMIN".equals(role);
-    boolean isDivLead  = "DIV_LEADER".equals(role);
-    boolean isTeamLead = "TEAM_LEAD".equals(role);
-
-    // ==== 3) Tự điều hướng dashboard theo vai trò (UX) ====
-    // Nếu DIV_LEADER vào /admin tổng thì đẩy về /admin/div (dashboard theo phòng ban)
-    if ("/admin".equals(path) && isDivLead && !isAdmin) {
-      String to = ctx + "/admin/div";
-      w.sendRedirect(to);
+    // 3) Tự điều hướng UX: leader vào /admin -> /admin/div
+    if ("/admin".equals(path) && me.isLeader() && !me.isAdmin()) {
+      w.sendRedirect(ctx + "/admin/div");
       return;
     }
 
-    // ==== 4) Phân quyền (deny-by-default) ====
+    // 4) Quy tắc quyền (deny-by-default)
     boolean allowed = false;
 
     if (path.startsWith("/admin")) {
-      // /admin/users chỉ cho ADMIN
-      if (path.startsWith("/admin/users")) {
-        allowed = isAdmin;
-      }
-      // /admin/div cho DIV_LEADER hoặc ADMIN (dashboard theo phòng ban)
-      else if (path.startsWith("/admin/div")) {
-        allowed = isDivLead || isAdmin;
-      }
-      // Các trang admin còn lại: chỉ ADMIN
-      else {
-        allowed = isAdmin;
+      if (me.isAdmin()) {
+        allowed = true; // ADMIN full quyền /admin/*
+      } else if (me.isLeader()) {
+        // Leader chỉ Dashboard theo phòng ban
+        if (path.startsWith("/admin/div")) allowed = true;
+        // Cho phép thêm trang báo cáo dành riêng leader nếu có:
+        // else if (path.startsWith("/admin/reports")) allowed = true;
+        else allowed = false;
+      } else {
+        allowed = false;
       }
     }
 
-    // /request/approve và con: ADMIN | DIV_LEADER | TEAM_LEAD
     if (path.equals("/request/approve") || path.startsWith("/request/approve/")) {
-      allowed = isAdmin || isDivLead || isTeamLead;
+      allowed = me.isAdmin() || me.isLeader();
     }
 
-    // ==== 5) Chặn + phản hồi rõ ràng ====
     if (!allowed) {
-      String msg = "Bạn không có quyền truy cập trang này. Vai trò hiện tại: " + (role.isEmpty() ? "UNKNOWN" : role);
+      String msg = "Bạn không có quyền truy cập trang này. Vai trò: " + me.getRoleCode();
 
       if (wantsJson(r)) {
         w.setStatus(HttpServletResponse.SC_FORBIDDEN);
@@ -95,10 +111,9 @@ public class RoleFilter implements Filter {
         return;
       }
 
-      // Forward sang trang 403 tuỳ biến; nếu lỗi thì dùng sendError
+      w.setStatus(HttpServletResponse.SC_FORBIDDEN);
       r.setAttribute("code", 403);
       r.setAttribute("message", msg);
-      w.setStatus(HttpServletResponse.SC_FORBIDDEN);
       try {
         r.getRequestDispatcher("/WEB-INF/views/errors/403.jsp").forward(r, w);
       } catch (Exception ex) {
@@ -107,23 +122,14 @@ public class RoleFilter implements Filter {
       return;
     }
 
-    // ==== 6) Cho qua + headers chống cache & bảo mật cơ bản ====
+    // 5) Headers chống cache & bảo mật
     noStore(w);
     securityHeaders(w);
 
     chain.doFilter(req, res);
   }
 
-  // ========= Helpers =========
-
-  private static String normalizePath(String p) {
-    if (p == null || p.isEmpty()) return "/";
-    // Bỏ slash cuối: "/admin/" -> "/admin"
-    if (p.length() > 1 && p.endsWith("/")) p = p.substring(0, p.length() - 1);
-    return p;
-  }
-
-  private static String safeUpper(String s) { return (s == null) ? "" : s.trim().toUpperCase(); }
+  /* ===== Helpers ===== */
 
   private static boolean wantsJson(HttpServletRequest r) {
     String xhr = r.getHeader("X-Requested-With");
@@ -143,10 +149,9 @@ public class RoleFilter implements Filter {
   }
 
   private static void securityHeaders(HttpServletResponse w) {
-    // Một số header an toàn tối thiểu
     if (w.getHeader("X-Content-Type-Options") == null) w.setHeader("X-Content-Type-Options", "nosniff");
-    if (w.getHeader("X-Frame-Options") == null) w.setHeader("X-Frame-Options", "SAMEORIGIN");
-    if (w.getHeader("Referrer-Policy") == null) w.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (w.getHeader("X-Frame-Options") == null)       w.setHeader("X-Frame-Options", "SAMEORIGIN");
+    if (w.getHeader("Referrer-Policy") == null)        w.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   }
 
   // Flash helper (session-scope)

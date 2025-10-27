@@ -3,11 +3,13 @@ package com.acme.leavemgmt.servlet.admin;
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.DBConnection;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 
 import java.io.IOException;
 import java.sql.*;
 import java.util.*;
+@WebServlet(urlPatterns = {"/admin"})          // <-- THÊM DÒNG NÀY
 
 public class AdminDashboardServlet extends HttpServlet {
 

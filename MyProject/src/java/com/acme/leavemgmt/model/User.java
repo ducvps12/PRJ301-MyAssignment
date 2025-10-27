@@ -27,22 +27,22 @@ public class User implements Serializable {
     private String fullName;
 
     private String role;        // ADMIN | DIV_LEADER | TEAM_LEAD | QA_LEAD | STAFF
-    private int roleId;         // optional – nếu DB có bảng Roles
-    private int departmentId;   // optional – nếu DB có bảng Departments
+    private int roleId;         // optional
+    private int departmentId;   // optional
     private String department;  // IT | QA | SALE ...
 
     // ===== Contact & profile =====
     private String email;
     private String phone;
-    private String address;     // NEW
-    private LocalDate birthday; // NEW
-    private String bio;         // NEW
-    private String avatarUrl;   // NEW
+    private String address;
+    private LocalDate birthday;
+    private String bio;
+    private String avatarUrl;
 
     // ===== Status & timestamps =====
-    private int status = 1;     // 1=active, 0=locked
-    private Date createdAt;     // NEW
-    private Date updatedAt;     // NEW
+    private int status = 1;     // 1 = active, 0 = locked
+    private Date createdAt;
+    private Date updatedAt;
 
     public User() {}
 
@@ -71,9 +71,11 @@ public class User implements Serializable {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    /** Role code chuẩn hoá (upper + fallback STAFF). */
     public String getRoleCode() {
         String r = (role == null || role.isBlank()) ? ROLE_STAFF : role;
-        return r.toUpperCase();
+        return r.trim().toUpperCase();
     }
 
     public int getRoleId() { return roleId; }
@@ -95,8 +97,9 @@ public class User implements Serializable {
 
     public int getStatus() { return status; }
     public void setStatus(int status) { this.status = status; }
+    public boolean isActive() { return status == 1; }
+    public String getStatusText() { return isActive() ? "ACTIVE" : "INACTIVE"; }
 
-    // ===== Implemented fields (trước đây bị UnsupportedOperationException) =====
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
 
@@ -124,11 +127,18 @@ public class User implements Serializable {
         return Arrays.stream(roles).anyMatch(r -> rc.equalsIgnoreCase(r));
     }
     public boolean isAdmin() { return hasRole(ROLE_ADMIN); }
+
+    /** Leader: DIV_LEADER | TEAM_LEAD | QA_LEAD | (hậu tố *_LEAD/*_LEADER) */
     public boolean isLead() {
         String rc = getRoleCode();
-        return rc.endsWith("_LEAD") || rc.endsWith("_LEADER") ||
-               rc.equalsIgnoreCase("LEADER") || rc.equalsIgnoreCase("MANAGER");
+        if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
+        return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
+            || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
     }
+
+    /** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
+    public boolean isLeader() { return isLead(); }
+
     public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
 
     public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }

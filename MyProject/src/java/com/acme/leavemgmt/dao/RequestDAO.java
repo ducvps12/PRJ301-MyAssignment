@@ -11,14 +11,15 @@ import java.time.LocalDate;
 import java.util.*;
 import java.sql.Date;
 
-
 public class RequestDAO {
 
     // =====================================================
     // =============== USER FUNCTIONS ======================
     // =====================================================
-
-    /** Đăng nhập: tương thích cả schema mới (role_id/department_id) và schema cũ (role/department) */
+    /**
+     * Đăng nhập: tương thích cả schema mới (role_id/department_id) và schema cũ
+     * (role/department)
+     */
     public User findByUsernameAndPassword(String username, String password) throws SQLException {
         final String sqlNew = """
             SELECT u.user_id        AS uid,
@@ -80,7 +81,9 @@ public class RequestDAO {
         return null;
     }
 
-    /** Lấy danh sách user theo tên phòng ban (dept_name hoặc Users.department) */
+    /**
+     * Lấy danh sách user theo tên phòng ban (dept_name hoặc Users.department)
+     */
     public List<User> listUsersByDepartment(String departmentName) throws SQLException {
         final String sqlNew = """
             SELECT u.user_id AS user_id,
@@ -142,100 +145,125 @@ public class RequestDAO {
     // =====================================================
     // =============== REQUEST FUNCTIONS ===================
     // =====================================================
-
-    /** Tạo đơn – hỗ trợ V2 (employee_id) / V1 (user_id) / V0 (created_by) */
-    
-    
-/** Chọn người duyệt đầu tiên cho user: ưu tiên TEAM_LEAD cùng phòng, không có thì DIV_LEADER. Fallback admin id=1. */
-public int findManagerFor(User u) throws SQLException {
-    if (u == null || u.getDepartment() == null) return 1;
-    try (Connection cn = getConnection()) { // hoặc DBConnection.getConnection()
-        // 1) Team Lead
-        String sqlTL = "SELECT TOP 1 id FROM dbo.Users WHERE department = ? AND role = 'TEAM_LEAD' ORDER BY id";
-        try (PreparedStatement ps = cn.prepareStatement(sqlTL)) {
-            ps.setString(1, u.getDepartment());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getInt(1);
+    /**
+     * Tạo đơn – hỗ trợ V2 (employee_id) / V1 (user_id) / V0 (created_by)
+     */
+    /**
+     * Chọn người duyệt đầu tiên cho user: ưu tiên TEAM_LEAD cùng phòng, không
+     * có thì DIV_LEADER. Fallback admin id=1.
+     */
+    public int findManagerFor(User u) throws SQLException {
+        if (u == null || u.getDepartment() == null) {
+            return 1;
+        }
+        try (Connection cn = getConnection()) { // hoặc DBConnection.getConnection()
+            // 1) Team Lead
+            String sqlTL = "SELECT TOP 1 id FROM dbo.Users WHERE department = ? AND role = 'TEAM_LEAD' ORDER BY id";
+            try (PreparedStatement ps = cn.prepareStatement(sqlTL)) {
+                ps.setString(1, u.getDepartment());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt(1);
+                    }
+                }
+            }
+            // 2) Division Leader
+            String sqlDL = "SELECT TOP 1 id FROM dbo.Users WHERE department = ? AND role = 'DIV_LEADER' ORDER BY id";
+            try (PreparedStatement ps = cn.prepareStatement(sqlDL)) {
+                ps.setString(1, u.getDepartment());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt(1);
+                    }
+                }
             }
         }
-        // 2) Division Leader
-        String sqlDL = "SELECT TOP 1 id FROM dbo.Users WHERE department = ? AND role = 'DIV_LEADER' ORDER BY id";
-        try (PreparedStatement ps = cn.prepareStatement(sqlDL)) {
-            ps.setString(1, u.getDepartment());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getInt(1);
-            }
-        }
+        return 1; // fallback Admin (đổi nếu admin của bạn không phải id=1)
     }
-    return 1; // fallback Admin (đổi nếu admin của bạn không phải id=1)
-}
-    
+
     public int createRequest(Request r) throws SQLException {
-    final String sqlV2 = """
+        final String sqlV2 = """
         INSERT INTO dbo.Requests
             (employee_id, approver_id, from_date, to_date, reason, status)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, N'PENDING')
     """;
-    final String sqlV1 = """
+        final String sqlV1 = """
         INSERT INTO dbo.Requests
             (user_id, type, status, reason, start_date, end_date, created_at)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME())
     """;
-    final String sqlV0 = """
+        final String sqlV0 = """
         INSERT INTO dbo.Requests
             (created_by, processed_by, start_date, end_date, reason, status)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, N'PENDING')
     """;
 
-    try (Connection cn = DBConnection.getConnection()) {
-        // ------- Thử schema V2 -------
-        try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
-            ps.setInt(1, r.getCreatedBy());                                  // employee_id
-            if (r.getProcessedBy() == null) ps.setNull(2, Types.INTEGER);
-            else ps.setInt(2, r.getProcessedBy());                            // approver_id
-            ps.setDate(3, Date.valueOf(r.getStartDate()));                    // from_date
-            ps.setDate(4, Date.valueOf(r.getEndDate()));                      // to_date
-            ps.setString(5, r.getReason());                                   // reason
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getInt(1);
-            }
-            return -1;
-        } catch (SQLException ignoreV2) {
-            // ------- Thử schema V1 -------
-            try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
-                final String defaultType   = "ANNUAL";                        // đổi nếu bạn có type thực
-                final String defaultStatus = "PENDING";
-                ps.setInt(1, r.getCreatedBy());                               // user_id
-                ps.setString(2, defaultType);                                 // type
-                ps.setString(3, defaultStatus);                               // status
-                ps.setString(4, r.getReason());                               // reason
-                ps.setDate(5, Date.valueOf(r.getStartDate()));                // start_date
-                ps.setDate(6, Date.valueOf(r.getEndDate()));                  // end_date
+        try (Connection cn = DBConnection.getConnection()) {
+            // ------- Thử schema V2 -------
+            try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
+                ps.setInt(1, r.getCreatedBy());                                  // employee_id
+                if (r.getProcessedBy() == null) {
+                    ps.setNull(2, Types.INTEGER);
+                } else {
+                    ps.setInt(2, r.getProcessedBy());                            // approver_id
+                }
+                ps.setDate(3, Date.valueOf(r.getStartDate()));                    // from_date
+                ps.setDate(4, Date.valueOf(r.getEndDate()));                      // to_date
+                ps.setString(5, r.getReason());                                   // reason
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) return rs.getInt(1);
+                    if (rs.next()) {
+                        return rs.getInt(1);
+                    }
                 }
                 return -1;
-            } catch (SQLException ignoreV1) {
-                // ------- Fallback schema V0 -------
-                try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
-                    ps.setInt(1, r.getCreatedBy());                           // created_by
-                    if (r.getProcessedBy() == null) ps.setNull(2, Types.INTEGER);
-                    else ps.setInt(2, r.getProcessedBy());                    // processed_by
-                    ps.setDate(3, Date.valueOf(r.getStartDate()));            // start_date
-                    ps.setDate(4, Date.valueOf(r.getEndDate()));              // end_date
-                    ps.setString(5, r.getReason());                           // reason
+            } catch (SQLException ignoreV2) {
+                // ------- Thử schema V1 -------
+                try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
+                    final String defaultType = "ANNUAL";                        // đổi nếu bạn có type thực
+                    final String defaultStatus = "PENDING";
+                    ps.setInt(1, r.getCreatedBy());                               // user_id
+                    ps.setString(2, defaultType);                                 // type
+                    ps.setString(3, defaultStatus);                               // status
+                    ps.setString(4, r.getReason());                               // reason
+                    ps.setDate(5, Date.valueOf(r.getStartDate()));                // start_date
+                    ps.setDate(6, Date.valueOf(r.getEndDate()));                  // end_date
                     try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) return rs.getInt(1);
+                        if (rs.next()) {
+                            return rs.getInt(1);
+                        }
                     }
                     return -1;
+                } catch (SQLException ignoreV1) {
+                    // ------- Fallback schema V0 -------
+                    try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
+                        ps.setInt(1, r.getCreatedBy());                           // created_by
+                        if (r.getProcessedBy() == null) {
+                            ps.setNull(2, Types.INTEGER);
+                        } else {
+                            ps.setInt(2, r.getProcessedBy());                    // processed_by
+                        }
+                        ps.setDate(3, Date.valueOf(r.getStartDate()));            // start_date
+                        ps.setDate(4, Date.valueOf(r.getEndDate()));              // end_date
+                        ps.setString(5, r.getReason());                           // reason
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) {
+                                return rs.getInt(1);
+                            }
+                        }
+                        return -1;
+                    }
                 }
             }
-        }}}
-    
-    /** Danh sách đơn của tôi – ưu tiên V2, rồi V1, rồi V0. Alias created_by cho đồng nhất. */
+        }
+    }
+
+    /**
+     * Danh sách đơn của tôi – ưu tiên V2, rồi V1, rồi V0. Alias created_by cho
+     * đồng nhất.
+     */
     public List<Request> listMyRequests(int userId) throws SQLException {
         final String sqlV2 = """
             SELECT
@@ -296,30 +324,44 @@ public int findManagerFor(User u) throws SQLException {
             try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
                 ps.setInt(1, userId);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
-                    if (!list.isEmpty()) return list;
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    if (!list.isEmpty()) {
+                        return list;
+                    }
                 }
-            } catch (SQLException ignoreV2) {}
+            } catch (SQLException ignoreV2) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
                 ps.setInt(1, userId);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
-                    if (!list.isEmpty()) return list;
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    if (!list.isEmpty()) {
+                        return list;
+                    }
                 }
-            } catch (SQLException ignoreV1) {}
+            } catch (SQLException ignoreV1) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
                 ps.setInt(1, userId);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
                 }
             }
         }
         return list;
     }
 
-    /** Danh sách đơn theo phòng ban (V2 → V1 → V0) */
+    /**
+     * Danh sách đơn theo phòng ban (V2 → V1 → V0)
+     */
     public List<Request> listSubordinateRequests(String departmentName) throws SQLException {
         final String sqlV2 = """
             SELECT
@@ -381,31 +423,47 @@ public int findManagerFor(User u) throws SQLException {
             try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
                 ps.setString(1, departmentName);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
-                    if (!list.isEmpty()) return list;
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    if (!list.isEmpty()) {
+                        return list;
+                    }
                 }
-            } catch (SQLException ignoreV2) {}
+            } catch (SQLException ignoreV2) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
                 ps.setString(1, departmentName);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
-                    if (!list.isEmpty()) return list;
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    if (!list.isEmpty()) {
+                        return list;
+                    }
                 }
-            } catch (SQLException ignoreV1) {}
+            } catch (SQLException ignoreV1) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
                 ps.setString(1, departmentName);
                 try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) list.add(mapRow(rs));
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
                 }
             }
         }
         return list;
     }
 
-    /** Lấy chi tiết đơn theo id (V2 → V1 → V0) */
-     /** Lấy chi tiết đơn theo id (V2 → V1 → V0) */
+    /**
+     * Lấy chi tiết đơn theo id (V2 → V1 → V0)
+     */
+    /**
+     * Lấy chi tiết đơn theo id (V2 → V1 → V0)
+     */
     public Request findById(int id) throws SQLException {
         final String sqlV2 = """
             SELECT
@@ -472,7 +530,8 @@ public int findManagerFor(User u) throws SQLException {
                         return r;
                     }
                 }
-            } catch (SQLException ignoreV2) { /* tiếp tục fallback */ }
+            } catch (SQLException ignoreV2) {
+                /* tiếp tục fallback */ }
 
             // V1
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
@@ -484,7 +543,8 @@ public int findManagerFor(User u) throws SQLException {
                         return r;
                     }
                 }
-            } catch (SQLException ignoreV1) { /* tiếp tục fallback */ }
+            } catch (SQLException ignoreV1) {
+                /* tiếp tục fallback */ }
 
             // V0
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
@@ -501,7 +561,9 @@ public int findManagerFor(User u) throws SQLException {
         return null;
     }
 
-    /** Map các cột chung từ ResultSet → Request (không mở thêm kết nối) */
+    /**
+     * Map các cột chung từ ResultSet → Request (không mở thêm kết nối)
+     */
     private Request mapRowBasic(ResultSet rs) throws SQLException {
         Request r = new Request();
         r.setId(rs.getInt("id"));
@@ -534,7 +596,8 @@ public int findManagerFor(User u) throws SQLException {
         // Nếu bạn có trường đính kèm:
         try {
             r.setAttachmentName(rs.getString("attachment_name"));
-        } catch (SQLException ignoreAttachment) { /* không có cột này thì bỏ qua */ }
+        } catch (SQLException ignoreAttachment) {
+            /* không có cột này thì bỏ qua */ }
 
         return r;
     }
@@ -542,18 +605,21 @@ public int findManagerFor(User u) throws SQLException {
     // =======================
     // ===== LỊCH SỬ (History)
     // =======================
-
-    /** Thêm lịch sử (mở kết nối mới) */
+    /**
+     * Thêm lịch sử (mở kết nối mới)
+     */
     public void insertHistory(int requestId, int actedBy, String actedByName,
-                              String action, String note) throws SQLException {
+            String action, String note) throws SQLException {
         try (Connection cn = DBConnection.getConnection()) {
             insertHistory(cn, requestId, actedBy, actedByName, action, note);
         }
     }
 
-    /** Thêm lịch sử (tái sử dụng connection có sẵn) */
+    /**
+     * Thêm lịch sử (tái sử dụng connection có sẵn)
+     */
     private void insertHistory(Connection cn, int requestId, int actedBy, String actedByName,
-                               String action, String note) throws SQLException {
+            String action, String note) throws SQLException {
         final String sql = """
           INSERT INTO Request_History(request_id, action, note, acted_by, acted_by_name)
           VALUES (?,?,?,?,?)
@@ -568,14 +634,18 @@ public int findManagerFor(User u) throws SQLException {
         }
     }
 
-    /** Danh sách lịch sử (mở kết nối mới) */
+    /**
+     * Danh sách lịch sử (mở kết nối mới)
+     */
     public List<RequestHistory> listHistory(int requestId) throws SQLException {
         try (Connection cn = DBConnection.getConnection()) {
             return listHistory(cn, requestId);
         }
     }
 
-    /** Danh sách lịch sử (tái sử dụng connection) */
+    /**
+     * Danh sách lịch sử (tái sử dụng connection)
+     */
     private List<RequestHistory> listHistory(Connection cn, int requestId) throws SQLException {
         final String sql = """
           SELECT id, request_id, action, note, acted_by, acted_by_name, acted_at
@@ -607,7 +677,6 @@ public int findManagerFor(User u) throws SQLException {
     // =======================
     // ===== HỦY YÊU CẦU
     // =======================
-
     /**
      * Hủy yêu cầu: chỉ cho phép khi là chủ đơn và trạng thái còn INPROGRESS.
      * Ghi manager_note (lý do hủy) và người xử lý = chính người hủy.
@@ -663,13 +732,12 @@ public int findManagerFor(User u) throws SQLException {
     // =======================
     // ===== TẠO MỚI (optional)
     // =======================
-
     /**
-     * Tạo đơn mới (tối giản) – trả về id mới. Tùy DB đặt tên cột tương ứng.
-     * Nhớ thêm lịch sử CREATED.
+     * Tạo đơn mới (tối giản) – trả về id mới. Tùy DB đặt tên cột tương ứng. Nhớ
+     * thêm lịch sử CREATED.
      */
     public int createRequest(Integer titleNullable, String reason, LocalDate start, LocalDate end,
-                             int createdBy, String createdByName) throws SQLException {
+            int createdBy, String createdByName) throws SQLException {
         // V0/V1 đặt cột id tự tăng là id; V2 là request_id và employee_id/from_date/to_date
         final String sqlV0 = """
           INSERT INTO Requests(title, reason, start_date, end_date, status, created_by)
@@ -696,9 +764,11 @@ public int findManagerFor(User u) throws SQLException {
                 ps.setInt(1, createdBy);
                 ps.setString(2, reason);
                 ps.setDate(3, start != null ? Date.valueOf(start) : null);
-                ps.setDate(4, end   != null ? Date.valueOf(end)   : null);
+                ps.setDate(4, end != null ? Date.valueOf(end) : null);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) newId = rs.getInt(1);
+                    if (rs.next()) {
+                        newId = rs.getInt(1);
+                    }
                 }
             } catch (SQLException tryV1thenV0) {
                 // thử V1
@@ -706,10 +776,12 @@ public int findManagerFor(User u) throws SQLException {
                     try (PreparedStatement ps1 = cn.prepareStatement(sqlV1)) {
                         ps1.setString(1, reason);
                         ps1.setDate(2, start != null ? Date.valueOf(start) : null);
-                        ps1.setDate(3, end   != null ? Date.valueOf(end)   : null);
+                        ps1.setDate(3, end != null ? Date.valueOf(end) : null);
                         ps1.setInt(4, createdBy);
                         try (ResultSet rs = ps1.executeQuery()) {
-                            if (rs.next()) newId = rs.getInt(1);
+                            if (rs.next()) {
+                                newId = rs.getInt(1);
+                            }
                         }
                     } catch (SQLException tryV0) {
                         // cuối cùng V0 (có title)
@@ -717,10 +789,12 @@ public int findManagerFor(User u) throws SQLException {
                             ps0.setString(1, titleNullable != null ? String.valueOf(titleNullable) : null);
                             ps0.setString(2, reason);
                             ps0.setDate(3, start != null ? Date.valueOf(start) : null);
-                            ps0.setDate(4, end   != null ? Date.valueOf(end)   : null);
+                            ps0.setDate(4, end != null ? Date.valueOf(end) : null);
                             ps0.setInt(5, createdBy);
                             try (ResultSet rs = ps0.executeQuery()) {
-                                if (rs.next()) newId = rs.getInt(1);
+                                if (rs.next()) {
+                                    newId = rs.getInt(1);
+                                }
                             }
                         }
                     }
@@ -741,7 +815,6 @@ public int findManagerFor(User u) throws SQLException {
     // ====================================
     // ===== DUYỆT / TỪ CHỐI (optional)
     // ====================================
-
     public boolean approve(int requestId, int managerId, String managerName, String note) throws SQLException {
         final String sqlV0 = """
           UPDATE Requests SET status='APPROVED', processed_by=?, manager_note=?
@@ -766,52 +839,61 @@ public int findManagerFor(User u) throws SQLException {
         return updateDecisionWithHistory(requestId, managerId, managerName, note, "REJECTED", sqlV0, sqlV2);
     }
 
-     public int duplicate(int id, int newOwnerId) throws SQLException{
+    public int duplicate(int id, int newOwnerId) throws SQLException {
         final String sql = """
             INSERT INTO Requests(title,reason,start_date,end_date,status,created_by)
             SELECT title, reason, start_date, end_date, 'PENDING', ?
               FROM Requests WHERE id=?
             """;
-        try(Connection c = DBConnection.getConnection();
-            PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, newOwnerId);
             ps.setInt(2, id);
             ps.executeUpdate();
-            try(ResultSet rs = ps.getGeneratedKeys()){
-                if(rs.next()) return rs.getInt(1);
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
             }
         }
         return 0;
     }
 
-    public int bulkUpdate(List<Integer> ids, String action, int managerId, String note) throws SQLException{
-        if (ids==null || ids.isEmpty()) return 0;
+    public int bulkUpdate(List<Integer> ids, String action, int managerId, String note) throws SQLException {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
         String newStatus = switch (action) {
-            case "approve" -> "APPROVED";
-            case "reject"  -> "REJECTED";
-            case "cancel"  -> "CANCELLED";
-            default -> null;
+            case "approve" ->
+                "APPROVED";
+            case "reject" ->
+                "REJECTED";
+            case "cancel" ->
+                "CANCELLED";
+            default ->
+                null;
         };
-        if (newStatus == null) return 0;
+        if (newStatus == null) {
+            return 0;
+        }
         String in = "?,".repeat(ids.size());
-        in = in.substring(0, in.length()-1);
-        String sql = "UPDATE Requests SET status=?, processed_by=?, manager_note=? WHERE status='PENDING' AND id IN ("+in+")";
-        try(Connection c = DBConnection.getConnection();
-            PreparedStatement ps = c.prepareStatement(sql)){
-            int idx=1;
+        in = in.substring(0, in.length() - 1);
+        String sql = "UPDATE Requests SET status=?, processed_by=?, manager_note=? WHERE status='PENDING' AND id IN (" + in + ")";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            int idx = 1;
             ps.setString(idx++, newStatus);
             ps.setInt(idx++, managerId);
             ps.setString(idx++, note);
-            for(Integer id: ids) ps.setInt(idx++, id);
+            for (Integer id : ids) {
+                ps.setInt(idx++, id);
+            }
             return ps.executeUpdate();
         }
     }
 
     // ====== LIST + COUNT with filters ======
-
     public List<Request> findPage(Integer userId, boolean onlyMine, boolean teamOfManager,
-                                  LocalDate from, LocalDate to, String status, String keyword,
-                                  String sort, int page, int pageSize) throws SQLException {
+            LocalDate from, LocalDate to, String status, String keyword,
+            String sort, int page, int pageSize) throws SQLException {
         StringBuilder sql = new StringBuilder("""
             SELECT r.id, r.title, r.reason, r.start_date, r.end_date, r.status,
                    r.created_by, u1.full_name AS created_by_name,
@@ -825,10 +907,10 @@ public int findManagerFor(User u) throws SQLException {
         List<Object> params = new ArrayList<>();
 
         // scope
-        if (onlyMine && userId != null){
+        if (onlyMine && userId != null) {
             sql.append(" AND r.created_by = ? ");
             params.add(userId);
-        } else if (teamOfManager && userId != null){
+        } else if (teamOfManager && userId != null) {
             // Giả sử Users.department: lấy tất cả user cùng department của manager trừ manager
             sql.append("""
                 AND u1.department IN (
@@ -839,45 +921,62 @@ public int findManagerFor(User u) throws SQLException {
         }
 
         // filters
-        if (from != null){ sql.append(" AND r.start_date >= ? "); params.add(from); }
-        if (to   != null){ sql.append(" AND r.end_date   <= ? "); params.add(to); }
-        if (status != null && !status.isBlank()){
-            sql.append(" AND r.status = ? "); params.add(status.toUpperCase());
+        if (from != null) {
+            sql.append(" AND r.start_date >= ? ");
+            params.add(from);
         }
-        if (keyword != null && !keyword.isBlank()){
+        if (to != null) {
+            sql.append(" AND r.end_date   <= ? ");
+            params.add(to);
+        }
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND r.status = ? ");
+            params.add(status.toUpperCase());
+        }
+        if (keyword != null && !keyword.isBlank()) {
             sql.append(" AND (r.title LIKE ? OR r.reason LIKE ? OR u1.full_name LIKE ?) ");
-            String k = "%"+keyword.trim()+"%";
-            params.add(k); params.add(k); params.add(k);
+            String k = "%" + keyword.trim() + "%";
+            params.add(k);
+            params.add(k);
+            params.add(k);
         }
 
         // sort
-        String order = switch (sort==null?"":sort) {
-            case "created_asc"  -> " r.id ASC ";
-            case "created_desc" -> " r.id DESC ";
-            case "from_asc"     -> " r.start_date ASC, r.id DESC ";
-            case "from_desc"    -> " r.start_date DESC, r.id DESC ";
-            default             -> " r.id DESC ";
+        String order = switch (sort == null ? "" : sort) {
+            case "created_asc" ->
+                " r.id ASC ";
+            case "created_desc" ->
+                " r.id DESC ";
+            case "from_asc" ->
+                " r.start_date ASC, r.id DESC ";
+            case "from_desc" ->
+                " r.start_date DESC, r.id DESC ";
+            default ->
+                " r.id DESC ";
         };
         sql.append(" ORDER BY ").append(order);
         sql.append(" OFFSET ? ROWS FETCH NEXT ? ROWS ONLY ");
-        int offset = Math.max(0, (page-1)*pageSize);
+        int offset = Math.max(0, (page - 1) * pageSize);
 
-        try(Connection c = DBConnection.getConnection();
-            PreparedStatement ps = c.prepareStatement(sql.toString())){
-            int i=1;
-            for(Object p: params) ps.setObject(i++, p);
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql.toString())) {
+            int i = 1;
+            for (Object p : params) {
+                ps.setObject(i++, p);
+            }
             ps.setInt(i++, offset);
             ps.setInt(i, pageSize);
-            try(ResultSet rs = ps.executeQuery()){
+            try (ResultSet rs = ps.executeQuery()) {
                 List<Request> out = new ArrayList<>();
-                while(rs.next()) out.add(map(rs));
+                while (rs.next()) {
+                    out.add(map(rs));
+                }
                 return out;
             }
         }
     }
 
     public int count(Integer userId, boolean onlyMine, boolean teamOfManager,
-                     LocalDate from, LocalDate to, String status, String keyword) throws SQLException {
+            LocalDate from, LocalDate to, String status, String keyword) throws SQLException {
         StringBuilder sql = new StringBuilder("""
             SELECT COUNT(1)
               FROM Requests r
@@ -886,9 +985,10 @@ public int findManagerFor(User u) throws SQLException {
             """);
         List<Object> params = new ArrayList<>();
 
-        if (onlyMine && userId != null){
-            sql.append(" AND r.created_by = ? "); params.add(userId);
-        } else if (teamOfManager && userId != null){
+        if (onlyMine && userId != null) {
+            sql.append(" AND r.created_by = ? ");
+            params.add(userId);
+        } else if (teamOfManager && userId != null) {
             sql.append("""
                 AND u1.department IN (
                     SELECT u.department FROM Users u WHERE u.id = ?
@@ -896,21 +996,32 @@ public int findManagerFor(User u) throws SQLException {
                 """);
             params.add(userId);
         }
-        if (from != null){ sql.append(" AND r.start_date >= ? "); params.add(from); }
-        if (to   != null){ sql.append(" AND r.end_date   <= ? "); params.add(to); }
-        if (status != null && !status.isBlank()){
-            sql.append(" AND r.status = ? "); params.add(status.toUpperCase());
+        if (from != null) {
+            sql.append(" AND r.start_date >= ? ");
+            params.add(from);
         }
-        if (keyword != null && !keyword.isBlank()){
+        if (to != null) {
+            sql.append(" AND r.end_date   <= ? ");
+            params.add(to);
+        }
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND r.status = ? ");
+            params.add(status.toUpperCase());
+        }
+        if (keyword != null && !keyword.isBlank()) {
             sql.append(" AND (r.title LIKE ? OR r.reason LIKE ? OR u1.full_name LIKE ?) ");
-            String k = "%"+keyword.trim()+"%";
-            params.add(k); params.add(k); params.add(k);
+            String k = "%" + keyword.trim() + "%";
+            params.add(k);
+            params.add(k);
+            params.add(k);
         }
 
-        try(Connection c = DBConnection.getConnection();
-            PreparedStatement ps = c.prepareStatement(sql.toString())){
-            int i=1; for(Object p: params) ps.setObject(i++, p);
-            try(ResultSet rs = ps.executeQuery()){
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql.toString())) {
+            int i = 1;
+            for (Object p : params) {
+                ps.setObject(i++, p);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }
         }
@@ -918,39 +1029,47 @@ public int findManagerFor(User u) throws SQLException {
 
     public Stats statsForManager(int managerId) throws SQLException {
         Stats s = new Stats();
-        try(Connection c = DBConnection.getConnection()){
+        try (Connection c = DBConnection.getConnection()) {
 
-            try(PreparedStatement ps = c.prepareStatement("""
+            try (PreparedStatement ps = c.prepareStatement("""
                 SELECT COUNT(*) FROM Requests r
                 JOIN Users u ON u.id=r.created_by
                 WHERE r.status='PENDING' AND u.department IN (SELECT department FROM Users WHERE id=?)
-            """)){
+            """)) {
                 ps.setInt(1, managerId);
-                try(ResultSet rs = ps.executeQuery()){ if(rs.next()) s.pendingCount = rs.getInt(1); }
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        s.pendingCount = rs.getInt(1);
+                    }
+                }
             }
 
-            try(PreparedStatement ps = c.prepareStatement("""
+            try (PreparedStatement ps = c.prepareStatement("""
                 SELECT COUNT(*) FROM Requests r
                 JOIN Users u ON u.id=r.created_by
                 WHERE r.status='APPROVED'
                   AND MONTH(r.start_date) = MONTH(GETDATE())
                   AND YEAR(r.start_date)  = YEAR(GETDATE())
                   AND u.department IN (SELECT department FROM Users WHERE id=?)
-            """)){
+            """)) {
                 ps.setInt(1, managerId);
-                try(ResultSet rs = ps.executeQuery()){ if(rs.next()) s.approvedThisMonth = rs.getInt(1); }
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        s.approvedThisMonth = rs.getInt(1);
+                    }
+                }
             }
 
-            try(PreparedStatement ps = c.prepareStatement("""
+            try (PreparedStatement ps = c.prepareStatement("""
                 SELECT SUM(CASE WHEN r.status='APPROVED' THEN 1 ELSE 0 END) AS ok,
                        COUNT(*) AS allcnt
                 FROM Requests r
                 JOIN Users u ON u.id=r.created_by
                 WHERE u.department IN (SELECT department FROM Users WHERE id=?)
-            """)){
+            """)) {
                 ps.setInt(1, managerId);
-                try(ResultSet rs = ps.executeQuery()){
-                    if(rs.next()){
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
                         s.approvalNumerator = rs.getInt("ok");
                         s.approvalDenominator = rs.getInt("allcnt");
                     }
@@ -967,24 +1086,24 @@ public int findManagerFor(User u) throws SQLException {
         r.setReason(rs.getString("reason"));
         Object sd = rs.getObject("start_date");
         Object ed = rs.getObject("end_date");
-        if (sd != null) r.setStartDate(((java.sql.Date)sd).toLocalDate());
-        if (ed != null) r.setEndDate(((java.sql.Date)ed).toLocalDate());
+        if (sd != null) {
+            r.setStartDate(((java.sql.Date) sd).toLocalDate());
+        }
+        if (ed != null) {
+            r.setEndDate(((java.sql.Date) ed).toLocalDate());
+        }
         r.setStatus(rs.getString("status"));
         r.setCreatedBy(rs.getInt("created_by"));
         r.setCreatedByName(rs.getString("created_by_name"));
         int pb = rs.getInt("processed_by");
-        r.setProcessedBy(rs.wasNull()?null:pb);
+        r.setProcessedBy(rs.wasNull() ? null : pb);
         r.setProcessedByName(rs.getString("processed_by_name"));
         r.setManagerNote(rs.getString("manager_note"));
         return r;
     }
 
-
-
-
-
     private boolean updateDecisionWithHistory(int requestId, int uid, String uname, String note,
-                                              String action, String sqlV0, String sqlV2) throws SQLException {
+            String action, String sqlV0, String sqlV2) throws SQLException {
         try (Connection cn = DBConnection.getConnection()) {
             cn.setAutoCommit(false);
             int rows;
@@ -1014,8 +1133,9 @@ public int findManagerFor(User u) throws SQLException {
     // =======================
     // ===== LIST cơ bản (optional, phục vụ list.jsp có phân quyền)
     // =======================
-
-    /** Liệt kê đơn theo người tạo (cho nhân viên) */
+    /**
+     * Liệt kê đơn theo người tạo (cho nhân viên)
+     */
     public List<Request> listByCreator(int userId) throws SQLException {
         final String sql = """
           SELECT id, title, reason, start_date, end_date, status, manager_note,
@@ -1027,17 +1147,20 @@ public int findManagerFor(User u) throws SQLException {
           ORDER BY id DESC
         """;
         List<Request> out = new ArrayList<>();
-        try (Connection cn = DBConnection.getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
             ps.setInt(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) out.add(mapRowBasic(rs));
+                while (rs.next()) {
+                    out.add(mapRowBasic(rs));
+                }
             }
         }
         return out;
     }
 
-    /** Liệt kê toàn bộ (cho manager) */
+    /**
+     * Liệt kê toàn bộ (cho manager)
+     */
     public List<Request> listAll() throws SQLException {
         final String sql = """
           SELECT id, title, reason, start_date, end_date, status, manager_note,
@@ -1048,16 +1171,18 @@ public int findManagerFor(User u) throws SQLException {
           ORDER BY id DESC
         """;
         List<Request> out = new ArrayList<>();
-        try (Connection cn = DBConnection.getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) out.add(mapRowBasic(rs));
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(mapRowBasic(rs));
+            }
         }
         return out;
     }
 
-
-    /** Duyệt/từ chối – nếu schema không có approver/manager_note thì chỉ update status */
+    /**
+     * Duyệt/từ chối – nếu schema không có approver/manager_note thì chỉ update
+     * status
+     */
     public void processRequest(int id, int managerId, String status, String note) throws SQLException {
         final String sqlV2 = """
             UPDATE [dbo].[Requests]
@@ -1102,10 +1227,12 @@ public int findManagerFor(User u) throws SQLException {
         }
     }
 
-    /** Map<userId, Set<LocalDate>> các ngày Approved trong phòng ban/khoảng ngày */
+    /**
+     * Map<userId, Set<LocalDate>> các ngày Approved trong phòng ban/khoảng ngày
+     */
     public Map<Integer, Set<LocalDate>> getApprovedAbsences(String departmentName,
-                                                            LocalDate from,
-                                                            LocalDate to) throws SQLException {
+            LocalDate from,
+            LocalDate to) throws SQLException {
         final String sqlV2 = """
             SELECT lr.from_date AS from_date, lr.to_date AS to_date, lr.employee_id AS uid
             FROM [dbo].[Requests] lr
@@ -1143,9 +1270,12 @@ public int findManagerFor(User u) throws SQLException {
                 ps.setDate(3, Date.valueOf(to));
                 try (ResultSet rs = ps.executeQuery()) {
                     accumulateDays(map, rs, from, to);
-                    if (!map.isEmpty()) return map;
+                    if (!map.isEmpty()) {
+                        return map;
+                    }
                 }
-            } catch (SQLException ignoreV2) {}
+            } catch (SQLException ignoreV2) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
                 ps.setString(1, departmentName);
@@ -1153,9 +1283,12 @@ public int findManagerFor(User u) throws SQLException {
                 ps.setDate(3, Date.valueOf(to));
                 try (ResultSet rs = ps.executeQuery()) {
                     accumulateDays(map, rs, from, to);
-                    if (!map.isEmpty()) return map;
+                    if (!map.isEmpty()) {
+                        return map;
+                    }
                 }
-            } catch (SQLException ignoreV1) {}
+            } catch (SQLException ignoreV1) {
+            }
 
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
                 ps.setString(1, departmentName);
@@ -1172,11 +1305,13 @@ public int findManagerFor(User u) throws SQLException {
     private void accumulateDays(Map<Integer, Set<LocalDate>> map, ResultSet rs, LocalDate from, LocalDate to) throws SQLException {
         while (rs.next()) {
             LocalDate start = rs.getDate("from_date").toLocalDate();
-            LocalDate end   = rs.getDate("to_date").toLocalDate();
-            int uid        = rs.getInt("uid");
+            LocalDate end = rs.getDate("to_date").toLocalDate();
+            int uid = rs.getInt("uid");
             Set<LocalDate> days = map.computeIfAbsent(uid, k -> new HashSet<>());
             for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
-                if (!d.isBefore(from) && !d.isAfter(to)) days.add(d);
+                if (!d.isBefore(from) && !d.isAfter(to)) {
+                    days.add(d);
+                }
             }
         }
     }
@@ -1184,8 +1319,9 @@ public int findManagerFor(User u) throws SQLException {
     // =====================================================
     // =============== MAPPING HELPER ======================
     // =====================================================
-
-    /** Helper chuyển ResultSet → Request (title không có trong schema → để null) */
+    /**
+     * Helper chuyển ResultSet → Request (title không có trong schema → để null)
+     */
     private Request mapRow(ResultSet rs) throws SQLException {
         Request r = new Request();
         r.setId(rs.getInt("id"));
@@ -1194,11 +1330,21 @@ public int findManagerFor(User u) throws SQLException {
         r.setStartDate(rs.getDate("start_date").toLocalDate());
         r.setEndDate(rs.getDate("end_date").toLocalDate());
         r.setStatus(rs.getString("status"));
-        try { r.setManagerNote(rs.getString("manager_note")); } catch (SQLException ignore) { r.setManagerNote(null); }
+        try {
+            r.setManagerNote(rs.getString("manager_note"));
+        } catch (SQLException ignore) {
+            r.setManagerNote(null);
+        }
 
         Object created = null, processed = null;
-        try { created = rs.getObject("created_by"); } catch (SQLException ignore) {}
-        try { processed = rs.getObject("processed_by"); } catch (SQLException ignore) {}
+        try {
+            created = rs.getObject("created_by");
+        } catch (SQLException ignore) {
+        }
+        try {
+            processed = rs.getObject("processed_by");
+        } catch (SQLException ignore) {
+        }
 
         r.setCreatedBy(created == null ? 0 : ((Number) created).intValue());
         r.setProcessedBy(processed == null ? null : ((Number) processed).intValue());
@@ -1206,62 +1352,326 @@ public int findManagerFor(User u) throws SQLException {
         return r;
     }
 // Trong RequestDAO
-public boolean updateStatusIfPending(int id, String newStatus, int approverId, String note) throws SQLException {
-    String sql =
-        "UPDATE dbo.Requests " +
-        "SET status = ?, approved_by = ?, approve_note = ?, approved_at = GETDATE() " +
-        "WHERE id = ? AND status = 'PENDING'";
 
-    try (Connection cn = getConnection();
+    public boolean updateStatusIfPending(int id, String newStatus, int approverId, String note) throws SQLException {
+        String sql
+                = "UPDATE dbo.Requests "
+                + "SET status = ?, approved_by = ?, approve_note = ?, approved_at = GETDATE() "
+                + "WHERE id = ? AND status = 'PENDING'";
+
+        try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, approverId);
+            ps.setString(3, note);
+            ps.setInt(4, id);
+            int rows = ps.executeUpdate();
+            return rows > 0;
+        }
+    }
+
+    public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
+        if (me == null) {
+            return false;
+        }
+        String role = me.getRole() == null ? "" : me.getRole().toUpperCase();
+
+        // ADMIN: duyệt tất
+        if ("ADMIN".equals(role)) {
+            return true;
+        }
+
+        // TEAM_LEAD: chỉ duyệt khi mình là manager trực tiếp của đơn
+        if ("TEAM_LEAD".equals(role)) {
+            String sql = "SELECT 1 FROM dbo.Requests WHERE id = ? AND manager_id = ?";
+            try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, reqObj.getId());
+                ps.setInt(2, me.getId());
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        }
+
+        // DIV_LEADER: duyệt khi nhân viên thuộc cùng department với mình
+        if ("DIV_LEADER".equals(role)) {
+            String sql
+                    = "SELECT 1 "
+                    + "FROM dbo.Requests r "
+                    + "JOIN dbo.Users u ON u.id = r.employee_id "
+                    + // nếu bạn dùng created_by thì thay ở đây
+                    "WHERE r.id = ? AND u.department = ?";
+            try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, reqObj.getId());
+                ps.setString(2, me.getDepartment());   // ví dụ 'IT', 'QA', 'SALE'
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // ĐẾM nhân sự active theo phòng ban (Users.status = 1)
+    public int countHeadcountActiveByDept(String dept) throws SQLException {
+        final String sql = """
+            SELECT COUNT(*)
+              FROM dbo.Users
+             WHERE status = 1
+               AND department = ?
+        """;
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, dept);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    // ĐẾM đơn PENDING theo phòng ban + optional khoảng ngày
+    public int countPendingByDept(String dept, LocalDate from, LocalDate to) throws SQLException {
+        StringBuilder sb = new StringBuilder("""
+            SELECT COUNT(*)
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status = 'pending'
+               AND COALESCE(r.department, u.department) = ?
+        """);
+        if (from != null) {
+            sb.append(" AND r.start_date >= ? ");
+        }
+        if (to != null) {
+            sb.append(" AND r.end_date   <= ? ");
+        }
+
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
+            int i = 1;
+            ps.setString(i++, dept);
+            if (from != null) {
+                ps.setDate(i++, Date.valueOf(from));
+            }
+            if (to != null) {
+                ps.setDate(i++, Date.valueOf(to));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    // ĐẾM đơn APPROVED trong tháng hiện tại theo phòng
+    public int countApprovedThisMonthByDept(String dept) throws SQLException {
+        final String sql = """
+            SELECT COUNT(*)
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status = 'approved'
+               AND COALESCE(r.department, u.department) = ?
+               AND YEAR(r.approved_at) = YEAR(GETDATE())
+               AND MONTH(r.approved_at) = MONTH(GETDATE())
+        """;
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, dept);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    // Tử số: tổng APPROVED theo phòng
+    public int countApprovalNumerator(String dept) throws SQLException {
+        final String sql = """
+            SELECT COUNT(*)
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status = 'approved'
+               AND COALESCE(r.department, u.department) = ?
+        """;
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, dept);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    // Mẫu số: tổng (APPROVED + REJECTED) theo phòng
+    public int countApprovalDenominator(String dept) throws SQLException {
+        final String sql = """
+            SELECT COUNT(*)
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status IN ('approved','rejected')
+               AND COALESCE(r.department, u.department) = ?
+        """;
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, dept);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    // Danh sách đơn PENDING (dùng cho bảng “Đơn chờ duyệt”)
+    public List<Request> findPendingList(String dept, LocalDate from, LocalDate to) throws SQLException {
+        StringBuilder sb = new StringBuilder("""
+            SELECT r.id,
+                   r.created_by,
+                   u.full_name      AS createdByName,
+                   r.type,
+                   r.reason,
+                   r.start_date,
+                   r.end_date,
+                   r.status,
+                   COALESCE(r.department, u.department) AS dept
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status = 'pending'
+               AND COALESCE(r.department, u.department) = ?
+        """);
+        if (from != null) {
+            sb.append(" AND r.start_date >= ? ");
+        }
+        if (to != null) {
+            sb.append(" AND r.end_date   <= ? ");
+        }
+        sb.append(" ORDER BY r.created_at DESC ");
+
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
+            int i = 1;
+            ps.setString(i++, dept);
+            if (from != null) {
+                ps.setDate(i++, Date.valueOf(from));
+            }
+            if (to != null) {
+                ps.setDate(i++, Date.valueOf(to));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Request> list = new ArrayList<>();
+                while (rs.next()) {
+                    Request r = new Request();
+                    r.setId(rs.getInt("id"));
+                    r.setCreatedBy(rs.getInt("created_by"));
+                    r.setCreatedByName(rs.getString("createdByName"));
+                    r.setType(rs.getString("type"));
+                    r.setReason(rs.getString("reason"));
+                    Date sd = rs.getDate("start_date");
+                    Date ed = rs.getDate("end_date");
+                    r.setStartDate(sd != null ? sd.toLocalDate() : null);
+                    r.setEndDate(ed != null ? ed.toLocalDate() : null);
+                    r.setStatus(rs.getString("status"));
+                    r.setDepartment(rs.getString("dept"));
+                    list.add(r);
+                }
+                return list;
+            }
+        }
+    }
+
+    // Danh sách “Đang nghỉ hôm nay” (đã APPROVED & ngày hôm nay nằm trong khoảng)
+    public List<Request> findTodayOff(String dept, LocalDate today) throws SQLException {
+        final String sql = """
+            SELECT r.id,
+                   r.created_by,
+                   u.full_name      AS createdByName,
+                   r.type,
+                   r.start_date,
+                   r.end_date,
+                   COALESCE(r.department, u.department) AS dept
+              FROM dbo.Requests r
+              LEFT JOIN dbo.Users u ON u.id = r.created_by
+             WHERE r.status = 'approved'
+               AND COALESCE(r.department, u.department) = ?
+               AND ? BETWEEN r.start_date AND r.end_date
+             ORDER BY u.full_name
+        """;
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, dept);
+            ps.setDate(2, Date.valueOf(today));
+
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Request> list = new ArrayList<>();
+                while (rs.next()) {
+                    Request r = new Request();
+                    r.setId(rs.getInt("id"));
+                    r.setCreatedBy(rs.getInt("created_by"));
+                    r.setCreatedByName(rs.getString("createdByName"));
+                    r.setType(rs.getString("type"));
+                    Date sd = rs.getDate("start_date");
+                    Date ed = rs.getDate("end_date");
+                    r.setStartDate(sd != null ? sd.toLocalDate() : null);
+                    r.setEndDate(ed != null ? ed.toLocalDate() : null);
+                    r.setDepartment(rs.getString("dept"));
+                    r.setStatus("approved");
+                    list.add(r);
+                }
+                return list;
+            }
+        }
+    }
+
+    
+private boolean hasRole(int userId, String... roleCodes) throws SQLException {
+    String in = String.join(",", java.util.Collections.nCopies(roleCodes.length, "?"));
+    String sql = "SELECT 1 FROM UserRoles ur " +
+                 "JOIN Roles r ON r.id = ur.role_id " +
+                 "WHERE ur.user_id=? AND r.code IN (" + in + ")";
+    try (Connection cn = DBConnection.getConnection();
          PreparedStatement ps = cn.prepareStatement(sql)) {
-        ps.setString(1, newStatus);
-        ps.setInt(2, approverId);
-        ps.setString(3, note);
-        ps.setInt(4, id);
-        int rows = ps.executeUpdate();
-        return rows > 0;
+        ps.setInt(1, userId);
+        for (int i = 0; i < roleCodes.length; i++) ps.setString(2 + i, roleCodes[i]);
+        try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
     }
 }
 
-   public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
-    if (me == null) return false;
-    String role = me.getRole() == null ? "" : me.getRole().toUpperCase();
-
-    // ADMIN: duyệt tất
-    if ("ADMIN".equals(role)) return true;
-
-    // TEAM_LEAD: chỉ duyệt khi mình là manager trực tiếp của đơn
-    if ("TEAM_LEAD".equals(role)) {
-        String sql = "SELECT 1 FROM dbo.Requests WHERE id = ? AND manager_id = ?";
-        try (Connection cn = getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setInt(1, reqObj.getId());
-            ps.setInt(2, me.getId());
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+    // Kiểm tra: me có quyền xử lý đơn này không (admin/div leader/manager trực tiếp)
+    public boolean canProcessRequest(int requestId, User me) throws SQLException {
+        try (Connection cn = DBConnection.getConnection()) {
+            // Ví dụ logic:
+            // - ADMIN: role_code='ADMIN' -> pass
+            // - Leader/Manager: là quản lý trực tiếp của requester HOẶC cùng phòng và có role LEAD
+            String sql
+                    = "SELECT 1 "
+                    + "FROM Requests r "
+                    + "JOIN Users u ON u.id = r.created_by "
+                    + "WHERE r.id=? AND ("
+                    + "  ? IN (SELECT ur.user_id FROM UserRoles ur JOIN Roles ro ON ur.role_id=ro.id WHERE ro.code IN ('ADMIN')) "
+                    + "  OR u.manager_id = ? "
+                    + "  OR (u.dept_id = (SELECT dept_id FROM Users WHERE id=?) AND "
+                    + "      EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles ro ON ur.role_id=ro.id WHERE ur.user_id=? AND ro.code IN ('DIV_LEAD','LEAD')) )"
+                    + ")";
+            try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, requestId);
+                ps.setInt(2, me.getId());
+                ps.setInt(3, me.getId());
+                ps.setInt(4, me.getId());
+                ps.setInt(5, me.getId());
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
             }
         }
     }
 
-    // DIV_LEADER: duyệt khi nhân viên thuộc cùng department với mình
-    if ("DIV_LEADER".equals(role)) {
-        String sql =
-            "SELECT 1 " +
-            "FROM dbo.Requests r " +
-            "JOIN dbo.Users u ON u.id = r.employee_id " +   // nếu bạn dùng created_by thì thay ở đây
-            "WHERE r.id = ? AND u.department = ?";
-        try (Connection cn = getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setInt(1, reqObj.getId());
-            ps.setString(2, me.getDepartment());   // ví dụ 'IT', 'QA', 'SALE'
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
+    // Duyệt/Từ chối
+    public boolean processDecision(int requestId, int approverId, boolean approve, String note) throws SQLException {
+        String sql
+                = "UPDATE Requests "
+                + "SET status=?, processed_by=?, processed_at=GETDATE(), decision_note=? "
+                + "WHERE id=? AND status='Inprogress'";
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setString(1, approve ? "Approved" : "Rejected");
+            ps.setInt(2, approverId);
+            ps.setString(3, note);
+            ps.setInt(4, requestId);
+            return ps.executeUpdate() == 1;
         }
     }
-
-    return false;
-}
-
 
 }

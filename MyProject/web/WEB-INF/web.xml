@@ -63,16 +63,7 @@
     <url-pattern>/request/approve</url-pattern>
   </servlet-mapping>
 
-  <servlet>
-    <servlet-name>RequestDetailServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.RequestDetailServlet</servlet-class>
-    <load-on-startup>2</load-on-startup>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>RequestDetailServlet</servlet-name>
-    <url-pattern>/request/detail</url-pattern>
-  </servlet-mapping>
-
+ 
   <servlet>
     <servlet-name>RequestCancelServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.RequestCancelServlet</servlet-class>
@@ -90,19 +81,18 @@
     <servlet-name>AgendaServlet</servlet-name>
     <url-pattern>/request/agenda</url-pattern>
   </servlet-mapping>
-
-  <!-- Admin area -->
-  <servlet>
+<!-- Admin area -->
+<servlet>
   <servlet-name>AdminDashboardServlet</servlet-name>
   <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDashboardServlet</servlet-class>
   <load-on-startup>2</load-on-startup>
 </servlet>
+
 <servlet-mapping>
   <servlet-name>AdminDashboardServlet</servlet-name>
-  <url-pattern>/admin</url-pattern>
+  <!-- Quan trọng: dùng prefix mapping để bắt cả /admin, /admin/, /admin/... -->
+  <url-pattern>/admin/*</url-pattern>
 </servlet-mapping>
-
-
 
 
 
@@ -115,18 +105,39 @@
     <url-pattern>/admin/div</url-pattern>
   </servlet-mapping>
 
-  <servlet>
-    <servlet-name>AdminUsersServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>AdminUsersServlet</servlet-name>
-    <url-pattern>/admin/users</url-pattern>
-  </servlet-mapping>
-  <servlet-mapping>
-    <servlet-name>AdminUsersServlet</servlet-name>
-    <url-pattern>/admin/users/toggle</url-pattern>
-  </servlet-mapping>
+<!-- Admin Users List -->
+<servlet>
+  <servlet-name>AdminUsersServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
+  <load-on-startup>3</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminUsersServlet</servlet-name>
+  <!-- map cả exact và prefix để chắc chắn -->
+  <url-pattern>/admin/users</url-pattern>
+  <url-pattern>/admin/users/*</url-pattern>
+</servlet-mapping>
+
+<!-- (nếu có) Toggle & Reset PW cũng cần mapping -->
+<servlet>
+  <servlet-name>AdminUserToggleServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserToggleServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminUserToggleServlet</servlet-name>
+  <url-pattern>/admin/users/toggle</url-pattern>
+</servlet-mapping>
+
+<servlet>
+  <servlet-name>AdminUserResetPwServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserResetPwServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminUserResetPwServlet</servlet-name>
+  <url-pattern>/admin/users/resetpw</url-pattern>
+</servlet-mapping>
+
+
 
   <!-- Profile & Logout -->
   <servlet>
