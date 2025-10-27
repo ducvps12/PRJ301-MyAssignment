@@ -84,7 +84,6 @@
       </form>
     </div>
 
-    <%@include file="/WEB-INF/views/common/_footer.jsp"%>
   </div>
 
   <script>

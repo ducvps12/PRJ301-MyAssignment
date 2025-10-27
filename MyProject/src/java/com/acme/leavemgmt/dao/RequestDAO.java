@@ -466,58 +466,69 @@ public class RequestDAO {
      */
     public Request findById(int id) throws SQLException {
         final String sqlV2 = """
-            SELECT
-                lr.request_id   AS id,
-                CAST(NULL AS NVARCHAR(255))  AS title, -- V2 không có title
-                lr.reason,
-                lr.from_date    AS start_date,
-                lr.to_date      AS end_date,
-                lr.status,
-                lr.manager_note,
-                u_emp.full_name AS created_name,
-                lr.employee_id  AS created_by,
-                u_app.full_name AS processed_name,
-                lr.approver_id  AS processed_by
-            FROM [dbo].[Requests] lr
-            JOIN [dbo].[Users] u_emp      ON u_emp.user_id = lr.employee_id
-            LEFT JOIN [dbo].[Users] u_app ON u_app.user_id = lr.approver_id
-            WHERE lr.request_id = ?
-        """;
+        SELECT
+            lr.request_id   AS id,
+            CAST(NULL AS NVARCHAR(255))  AS title,
+            lr.reason,
+            lr.from_date    AS start_date,
+            lr.to_date      AS end_date,
+            lr.status,
+            lr.manager_note,
+            u_emp.full_name AS created_name,
+            lr.employee_id  AS created_by,
+            u_app.full_name AS processed_name,
+            lr.approver_id  AS processed_by,
+            COALESCE(lt.name, lt.code, lr.type) AS leaveTypeName
+        FROM [dbo].[Requests] lr
+        JOIN [dbo].[Users] u_emp      ON u_emp.user_id = lr.employee_id
+        LEFT JOIN [dbo].[Users] u_app ON u_app.user_id = lr.approver_id
+        LEFT JOIN [dbo].[LeaveTypes] lt
+               ON (lt.id = lr.leave_type_id OR lt.code = lr.type)
+        WHERE lr.request_id = ?
+    """;
+
         final String sqlV1 = """
-            SELECT
-                r.id            AS id,
-                CAST(NULL AS NVARCHAR(255))  AS title, -- V1 không có title
-                r.reason,
-                r.start_date    AS start_date,
-                r.end_date      AS end_date,
-                r.status,
-                CAST(NULL AS NVARCHAR(400))  AS manager_note,
-                u.full_name     AS created_name,
-                r.user_id       AS created_by,
-                CAST(NULL AS NVARCHAR(200))  AS processed_name,
-                CAST(NULL AS INT)            AS processed_by
-            FROM [dbo].[Requests] r
-            JOIN [dbo].[Users] u ON u.id = r.user_id
-            WHERE r.id = ?
-        """;
+        SELECT
+            r.id            AS id,
+            CAST(NULL AS NVARCHAR(255))  AS title,
+            r.reason,
+            r.start_date    AS start_date,
+            r.end_date      AS end_date,
+            r.status,
+            CAST(NULL AS NVARCHAR(400))  AS manager_note,
+            u.full_name     AS created_name,
+            r.user_id       AS created_by,
+            CAST(NULL AS NVARCHAR(200))  AS processed_name,
+            CAST(NULL AS INT)            AS processed_by,
+            COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+        FROM [dbo].[Requests] r
+        JOIN [dbo].[Users] u ON u.id = r.user_id
+        LEFT JOIN [dbo].[LeaveTypes] lt
+               ON (lt.id = r.leave_type_id OR lt.code = r.type)
+        WHERE r.id = ?
+    """;
+
         final String sqlV0 = """
-            SELECT
-                r.id            AS id,
-                r.title         AS title,      -- V0 có thể có title
-                r.reason,
-                r.start_date    AS start_date,
-                r.end_date      AS end_date,
-                r.status,
-                r.manager_note,
-                u_emp.full_name AS created_name,
-                r.created_by    AS created_by,
-                u_app.full_name AS processed_name,
-                r.processed_by  AS processed_by
-            FROM [dbo].[Requests] r
-            JOIN [dbo].[Users] u_emp      ON u_emp.id = r.created_by
-            LEFT JOIN [dbo].[Users] u_app ON u_app.id = r.processed_by
-            WHERE r.id = ?
-        """;
+        SELECT
+            r.id            AS id,
+            CAST(NULL AS NVARCHAR(255))  AS title,   -- bỏ r.title để tránh lỗi
+            r.reason,
+            r.start_date    AS start_date,
+            r.end_date      AS end_date,
+            r.status,
+            r.manager_note,
+            u_emp.full_name AS created_name,
+            r.created_by    AS created_by,
+            u_app.full_name AS processed_name,
+            r.processed_by  AS processed_by,
+            COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+        FROM [dbo].[Requests] r
+        JOIN [dbo].[Users] u_emp      ON u_emp.id = r.created_by
+        LEFT JOIN [dbo].[Users] u_app ON u_app.id = r.processed_by
+        LEFT JOIN [dbo].[LeaveTypes] lt
+               ON (lt.id = r.leave_type_id OR lt.code = r.type)
+        WHERE r.id = ?
+    """;
 
         try (Connection cn = DBConnection.getConnection()) {
             // V2
@@ -526,12 +537,13 @@ public class RequestDAO {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         Request r = mapRowBasic(rs);
+                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
                         r.setHistory(listHistory(cn, id));
                         return r;
                     }
                 }
             } catch (SQLException ignoreV2) {
-                /* tiếp tục fallback */ }
+                /* fallback */ }
 
             // V1
             try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
@@ -539,12 +551,13 @@ public class RequestDAO {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         Request r = mapRowBasic(rs);
+                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
                         r.setHistory(listHistory(cn, id));
                         return r;
                     }
                 }
             } catch (SQLException ignoreV1) {
-                /* tiếp tục fallback */ }
+                /* fallback */ }
 
             // V0
             try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
@@ -552,6 +565,7 @@ public class RequestDAO {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         Request r = mapRowBasic(rs);
+                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
                         r.setHistory(listHistory(cn, id));
                         return r;
                     }
@@ -559,6 +573,14 @@ public class RequestDAO {
             }
         }
         return null;
+    }
+
+    private static String safeGetString(ResultSet rs, String col) {
+        try {
+            return rs.getString(col);
+        } catch (SQLException e) {
+            return null;
+        }
     }
 
     /**
@@ -1616,19 +1638,21 @@ public class RequestDAO {
         }
     }
 
-    
-private boolean hasRole(int userId, String... roleCodes) throws SQLException {
-    String in = String.join(",", java.util.Collections.nCopies(roleCodes.length, "?"));
-    String sql = "SELECT 1 FROM UserRoles ur " +
-                 "JOIN Roles r ON r.id = ur.role_id " +
-                 "WHERE ur.user_id=? AND r.code IN (" + in + ")";
-    try (Connection cn = DBConnection.getConnection();
-         PreparedStatement ps = cn.prepareStatement(sql)) {
-        ps.setInt(1, userId);
-        for (int i = 0; i < roleCodes.length; i++) ps.setString(2 + i, roleCodes[i]);
-        try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+    private boolean hasRole(int userId, String... roleCodes) throws SQLException {
+        String in = String.join(",", java.util.Collections.nCopies(roleCodes.length, "?"));
+        String sql = "SELECT 1 FROM UserRoles ur "
+                + "JOIN Roles r ON r.id = ur.role_id "
+                + "WHERE ur.user_id=? AND r.code IN (" + in + ")";
+        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            for (int i = 0; i < roleCodes.length; i++) {
+                ps.setString(2 + i, roleCodes[i]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
-}
 
     // Kiểm tra: me có quyền xử lý đơn này không (admin/div leader/manager trực tiếp)
     public boolean canProcessRequest(int requestId, User me) throws SQLException {

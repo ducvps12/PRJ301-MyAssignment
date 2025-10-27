@@ -6,64 +6,119 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import static org.apache.tomcat.jakartaee.commons.compress.utils.TimeUtils.toDate;
+import static org.apache.tomcat.jakartaee.commons.io.file.attribute.FileTimes.toDate;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 /**
- * Leave Request domain model.
- * - Dùng LocalDate cho ngày; cung cấp alias java.util.Date cho JSP fmt:formatDate.
- * - Trạng thái nên lưu lowercase trong DB: pending/approved/rejected/cancelled.
- * - Có alias để tương thích JSP cũ: getFrom(), getTo(), getFullName(), getType().
+ * Leave Request domain model. - Dùng LocalDate cho ngày; cung cấp alias
+ * java.util.Date cho JSP fmt:formatDate. - Trạng thái nên lưu lowercase trong
+ * DB: pending/approved/rejected/cancelled. - Có alias để tương thích JSP cũ:
+ * getFrom(), getTo(), getFullName(), getType().
  */
 public class Request implements Serializable {
+
     private static final long serialVersionUID = 1L;
 
-    /** Trạng thái gợi ý dùng */
-    public static final String ST_PENDING   = "pending";
-    public static final String ST_APPROVED  = "approved";
-    public static final String ST_REJECTED  = "rejected";
+    /**
+     * Trạng thái gợi ý dùng
+     */
+    public static final String ST_PENDING = "pending";
+    public static final String ST_APPROVED = "approved";
+    public static final String ST_REJECTED = "rejected";
     public static final String ST_CANCELLED = "cancelled";
+// Request.java
+    private String leaveTypeName; // tên hiển thị
 
+    public String getLeaveTypeName() {
+        if (leaveTypeName != null && !leaveTypeName.isBlank()) {
+            return leaveTypeName;
+        }
+        // fallback từ type/code nếu bạn đã có
+        String t = getType(); // ví dụ field "type" hiện có
+        if (t == null) {
+            return null;
+        }
+        return switch (t) {
+            case "AL", "ANNUAL" ->
+                "Annual Leave (Phép năm)";
+            case "SL", "SICK" ->
+                "Sick Leave (Nghỉ ốm)";
+            case "UL", "UNPAID" ->
+                "Unpaid Leave (Không lương)";
+            default ->
+                t;
+        };
+    }
+
+    public void setLeaveTypeName(String name) {
+        this.leaveTypeName = name;
+    }
+
+    
     private int id;
 
-    /** Optional title cho UI */
+    /**
+     * Optional title cho UI
+     */
     private String title;
 
-    /** Loại nghỉ (Annual, Sick, WFH, …) – thêm để khớp JSP cũ */
+    /**
+     * Loại nghỉ (Annual, Sick, WFH, …) – thêm để khớp JSP cũ
+     */
     private String type;
 
     private String reason;
 
-    /** Ngày dùng java.time */
+    /**
+     * Ngày dùng java.time
+     */
     private LocalDate startDate;
     private LocalDate endDate;
 
-    /** Trạng thái: pending/approved/rejected/cancelled (khuyến nghị lowercase trong DB) */
+    /**
+     * Trạng thái: pending/approved/rejected/cancelled (khuyến nghị lowercase
+     * trong DB)
+     */
     private String status;
 
-    /** Người tạo */
+    /**
+     * Người tạo
+     */
     private int createdBy;
     private String createdByName;   // JOIN từ Users
 
-    /** Người xử lý */
+    /**
+     * Người xử lý
+     */
     private Integer processedBy;    // nullable
     private String processedByName; // JOIN từ Users
 
-    /** Ghi chú của quản lý khi duyệt/từ chối */
+    /**
+     * Ghi chú của quản lý khi duyệt/từ chối
+     */
     private String managerNote;
 
-    /** Phòng ban & người duyệt đầu tiên (để filter/logic phê duyệt) */
+    /**
+     * Phòng ban & người duyệt đầu tiên (để filter/logic phê duyệt)
+     */
     private String department;
     private int managerId;
 
-    /** Đính kèm (nếu có) */
+    /**
+     * Đính kèm (nếu có)
+     */
     private String attachmentName;
 
     private List<RequestHistory> history;
 
     // ---------------- Constructors ----------------
-    public Request() {}
+    public Request() {
+    }
 
     public Request(int id, String reason, LocalDate startDate, LocalDate endDate,
-                   String status, int createdBy, String createdByName) {
+            String status, int createdBy, String createdByName) {
         this.id = id;
         this.reason = reason;
         this.startDate = startDate;
@@ -73,9 +128,36 @@ public class Request implements Serializable {
         this.createdByName = createdByName;
     }
 
-    /** Copy constructor */
+    public long getDays() {
+        LocalDate s = getStartDate();  // dùng getter thay vì truy cập field
+        LocalDate e = getEndDate();
+        if (s == null || e == null) {
+            return 0;
+        }
+        return ChronoUnit.DAYS.between(s, e) + 1;
+    }
+    
+    
+    // Fields
+private String attachmentUrl;   // hoặc attachmentPath nếu bạn thích lưu path nội bộ
+private String attachmentPath;
+
+// --- Attachment (tạm thời, có thể chưa map DB) ---
+public String getAttachmentUrl()  { return null; }     // TODO: map thật sau
+public String getAttachmentPath() { return null; }     // TODO: map thật sau
+public String getAttachmentName() { return null; }     // TODO: map thật sau
+// Nếu JSP có dùng ${r.hasAttachment}, thêm luôn:
+public boolean isHasAttachment() {
+    return false; // TODO: khi map thật thì trả theo Url/Path/Name
+}
+
+    /**
+     * Copy constructor
+     */
     public Request(Request other) {
-        if (other == null) return;
+        if (other == null) {
+            return;
+        }
         this.id = other.id;
         this.title = other.title;
         this.type = other.type;
@@ -95,128 +177,263 @@ public class Request implements Serializable {
     }
 
     // -------- Helpers cho JSP (fmt:formatDate cần java.util.Date) --------
-    public Date getStartDateDate() { return startDate == null ? null : java.sql.Date.valueOf(startDate); }
-    public Date getEndDateDate()   { return endDate   == null ? null : java.sql.Date.valueOf(endDate); }
+    public Date getStartDateDate() {
+        return startDate == null ? null : java.sql.Date.valueOf(startDate);
+    }
+
+    public Date getEndDateDate() {
+        return endDate == null ? null : java.sql.Date.valueOf(endDate);
+    }
 
     // Back-compat alias (nếu JSP cũ gọi tên này)
-    public Date getStartDateUtil() { return getStartDateDate(); }
-    public Date getEndDateUtil()   { return getEndDateDate(); }
+    public Date getStartDateUtil() {
+        return getStartDateDate();
+    }
 
-    /** Alias để khớp JSP cũ dùng r.from / r.to */
-    public Date getFrom() { return getStartDateDate(); }
-    public Date getTo()   { return getEndDateDate(); }
+    public Date getEndDateUtil() {
+        return getEndDateDate();
+    }
 
-    /** Alias để khớp JSP cũ dùng r.fullName */
-    public String getFullName() { return createdByName; }
+    /**
+     * Alias để khớp JSP cũ dùng r.from / r.to
+     */
+    public Date getFrom() {
+        return getStartDateDate();
+    }
 
-    /** Alias để khớp JSP cũ dùng r.type */
-    public String getType() { return type; }
+    public Date getTo() {
+        return getEndDateDate();
+    }
+
+    /**
+     * Alias để khớp JSP cũ dùng r.fullName
+     */
+    public String getFullName() {
+        return createdByName;
+    }
+
+    /**
+     * Alias để khớp JSP cũ dùng r.type
+     */
+    public String getType() {
+        return type;
+    }
 
     // ---------------- Business helpers ----------------
-    /** Tổng số ngày (bao gồm cả ngày bắt đầu & kết thúc); 0 nếu thiếu ngày */
+    /**
+     * Tổng số ngày (bao gồm cả ngày bắt đầu & kết thúc); 0 nếu thiếu ngày
+     */
     public long getTotalDays() {
-        if (startDate == null || endDate == null) return 0L;
+        if (startDate == null || endDate == null) {
+            return 0L;
+        }
         return ChronoUnit.DAYS.between(startDate, endDate) + 1;
     }
 
-    public String getStatusUpper() { return status == null ? null : status.toUpperCase(); }
-    public String getStatusLower() { return status == null ? null : status.toLowerCase(); }
+    public String getStatusUpper() {
+        return status == null ? null : status.toUpperCase();
+    }
 
-    public boolean isPending()   { return ST_PENDING.equalsIgnoreCase(status); }
-    public boolean isApproved()  { return ST_APPROVED.equalsIgnoreCase(status); }
-    public boolean isRejected()  { return ST_REJECTED.equalsIgnoreCase(status); }
-    public boolean isCancelled() { return ST_CANCELLED.equalsIgnoreCase(status); }
+    public String getStatusLower() {
+        return status == null ? null : status.toLowerCase();
+    }
 
-    /** Có hiệu lực bao phủ ngày d cho yêu cầu đã APPROVED (bao gồm 2 đầu) */
+    public boolean isPending() {
+        return ST_PENDING.equalsIgnoreCase(status);
+    }
+
+    public boolean isApproved() {
+        return ST_APPROVED.equalsIgnoreCase(status);
+    }
+
+    public boolean isRejected() {
+        return ST_REJECTED.equalsIgnoreCase(status);
+    }
+
+    public boolean isCancelled() {
+        return ST_CANCELLED.equalsIgnoreCase(status);
+    }
+
+    /**
+     * Có hiệu lực bao phủ ngày d cho yêu cầu đã APPROVED (bao gồm 2 đầu)
+     */
     public boolean isActiveOn(LocalDate d) {
-        if (!isApproved() || d == null || startDate == null || endDate == null) return false;
+        if (!isApproved() || d == null || startDate == null || endDate == null) {
+            return false;
+        }
         return !d.isBefore(startDate) && !d.isAfter(endDate);
     }
 
-    /** Khoảng ngày [a,b] có giao với request này không (không xét status) */
+    /**
+     * Khoảng ngày [a,b] có giao với request này không (không xét status)
+     */
     public boolean overlaps(LocalDate a, LocalDate b) {
-        if (a == null || b == null || startDate == null || endDate == null) return false;
+        if (a == null || b == null || startDate == null || endDate == null) {
+            return false;
+        }
         if (b.isBefore(a)) { // hoán đổi nếu truyền ngược
-            LocalDate tmp = a; a = b; b = tmp;
+            LocalDate tmp = a;
+            a = b;
+            b = tmp;
         }
         return !(endDate.isBefore(a) || startDate.isAfter(b));
     }
 
-    public boolean hasAttachment() { return attachmentName != null && !attachmentName.isBlank(); }
+    public boolean hasAttachment() {
+        return attachmentName != null && !attachmentName.isBlank();
+    }
 
     // ---------------- Getters / Setters ----------------
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public int getId() {
+        return id;
+    }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setId(int id) {
+        this.id = id;
+    }
 
-    public void setType(String type) { this.type = type; }
+    public String getTitle() {
+        return title;
+    }
 
-    public String getReason() { return reason; }
-    public void setReason(String reason) { this.reason = reason; }
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+    public void setType(String type) {
+        this.type = type;
+    }
 
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+    public String getReason() {
+        return reason;
+    }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
 
-    public int getCreatedBy() { return createdBy; }
-    public void setCreatedBy(int createdBy) { this.createdBy = createdBy; }
+    public LocalDate getStartDate() {
+        return startDate;
+    }
 
-    public String getCreatedByName() { return createdByName; }
-    public void setCreatedByName(String createdByName) { this.createdByName = createdByName; }
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
 
-    public Integer getProcessedBy() { return processedBy; }
-    public void setProcessedBy(Integer processedBy) { this.processedBy = processedBy; }
+    public LocalDate getEndDate() {
+        return endDate;
+    }
 
-    public String getProcessedByName() { return processedByName; }
-    public void setProcessedByName(String processedByName) { this.processedByName = processedByName; }
+    public void setEndDate(LocalDate endDate) {
+        this.endDate = endDate;
+    }
 
-    public String getManagerNote() { return managerNote; }
-    public void setManagerNote(String managerNote) { this.managerNote = managerNote; }
+    public String getStatus() {
+        return status;
+    }
 
-    public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setStatus(String status) {
+        this.status = status;
+    }
 
-    public int getManagerId() { return managerId; }
-    public void setManagerId(int managerId) { this.managerId = managerId; }
+    public int getCreatedBy() {
+        return createdBy;
+    }
 
-    public String getAttachmentName() { return attachmentName; }
-    public void setAttachmentName(String v) { this.attachmentName = v; }
+    public void setCreatedBy(int createdBy) {
+        this.createdBy = createdBy;
+    }
 
-    public List<RequestHistory> getHistory() { return history; }
-    public void setHistory(List<RequestHistory> history) { this.history = history; }
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String createdByName) {
+        this.createdByName = createdByName;
+    }
+
+    public Integer getProcessedBy() {
+        return processedBy;
+    }
+
+    public void setProcessedBy(Integer processedBy) {
+        this.processedBy = processedBy;
+    }
+
+    public String getProcessedByName() {
+        return processedByName;
+    }
+
+    public void setProcessedByName(String processedByName) {
+        this.processedByName = processedByName;
+    }
+
+    public String getManagerNote() {
+        return managerNote;
+    }
+
+    public void setManagerNote(String managerNote) {
+        this.managerNote = managerNote;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
+    }
+
+    public int getManagerId() {
+        return managerId;
+    }
+
+    public void setManagerId(int managerId) {
+        this.managerId = managerId;
+    }
+
+   
+    public void setAttachmentName(String v) {
+        this.attachmentName = v;
+    }
+
+    public List<RequestHistory> getHistory() {
+        return history;
+    }
+
+    public void setHistory(List<RequestHistory> history) {
+        this.history = history;
+    }
 
     // ---------------- Object contracts ----------------
     @Override
     public String toString() {
-        return "Request{" +
-                "id=" + id +
-                ", title='" + title + '\'' +
-                ", type='" + type + '\'' +
-                ", reason='" + reason + '\'' +
-                ", startDate=" + startDate +
-                ", endDate=" + endDate +
-                ", status='" + status + '\'' +
-                ", createdBy=" + createdBy +
-                ", createdByName='" + createdByName + '\'' +
-                ", processedBy=" + processedBy +
-                ", processedByName='" + processedByName + '\'' +
-                ", department='" + department + '\'' +
-                ", managerId=" + managerId +
-                ", attachmentName='" + attachmentName + '\'' +
-                '}';
+        return "Request{"
+                + "id=" + id
+                + ", title='" + title + '\''
+                + ", type='" + type + '\''
+                + ", reason='" + reason + '\''
+                + ", startDate=" + startDate
+                + ", endDate=" + endDate
+                + ", status='" + status + '\''
+                + ", createdBy=" + createdBy
+                + ", createdByName='" + createdByName + '\''
+                + ", processedBy=" + processedBy
+                + ", processedByName='" + processedByName + '\''
+                + ", department='" + department + '\''
+                + ", managerId=" + managerId
+                + ", attachmentName='" + attachmentName + '\''
+                + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Request)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Request)) {
+            return false;
+        }
         Request request = (Request) o;
         return id == request.id;
     }

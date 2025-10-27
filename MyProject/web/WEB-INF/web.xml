@@ -188,19 +188,33 @@
     <url-pattern>/request/approve/*</url-pattern>
   </filter-mapping>
 
+<!-- Servlet -->
+<servlet>
+  <servlet-name>RequestDetailServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.RequestDetailServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+
+<!-- Maps -->
+<servlet-mapping>
+  <servlet-name>RequestDetailServlet</servlet-name>
+  <url-pattern>/request/detail</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+  <servlet-name>RequestDetailServlet</servlet-name>
+  <url-pattern>/request/detail/*</url-pattern>
+</servlet-mapping>
+
+
+
   <!-- ===================== ERROR PAGES ===================== -->
-  <error-page>
-    <error-code>403</error-code>
-    <location>/WEB-INF/views/errors/403.jsp</location>
-  </error-page>
-  <error-page>
-    <error-code>404</error-code>
-    <location>/WEB-INF/views/errors/404.jsp</location>
-  </error-page>
-  <error-page>
-    <error-code>500</error-code>
-    <location>/WEB-INF/views/errors/500.jsp</location>
-  </error-page>
+
+
+<!-- Bật/tắt panel debug -->
+<context-param>
+  <param-name>app.mode</param-name>
+  <param-value>dev</param-value>  <!-- đổi 'prod' khi lên production -->
+</context-param>
 
   <!-- ===================== SESSION ===================== -->
   <session-config>

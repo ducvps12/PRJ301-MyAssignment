@@ -16,13 +16,59 @@ import java.util.List;
 @WebServlet(name="AdminUsersServlet", urlPatterns={"/admin/users"})
 public class AdminUsersServlet extends HttpServlet {
 
+  /** DÒNG NÀY QUAN TRỌNG: JavaBean để JSP EL truy cập được qua getter */
   public static class Row {
-    public int id;
-    public String username, fullName, email, role, department, status; // ACTIVE/INACTIVE
+    private int id;
+    private String username;
+    private String fullName;
+    private String email;
+    private String role;
+    private String department;
+    private String status; // "ACTIVE"/"INACTIVE"
+
+    // Getters (EL cần những hàm này)
+    public int getId() { return id; }
+    public String getUsername() { return username; }
+    public String getFullName() { return fullName; }
+    public String getEmail() { return email; }
+    public String getRole() { return role; }
+    public String getDepartment() { return department; }
+    public String getStatus() { return status; }
+
+    // Setters (để servlet set dữ liệu)
+    public void setId(int id) { this.id = id; }
+    public void setUsername(String username) { this.username = username; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+    public void setEmail(String email) { this.email = email; }
+    public void setRole(String role) { this.role = role; }
+    public void setDepartment(String department) { this.department = department; }
+    public void setStatus(String status) { this.status = status; }
   }
+
+  // Page có getter để JSP EL đọc được (page.data, page.pageIndex, ...)
   public static class Page<T> {
-    public int pageIndex, pageSize, totalPages, totalItems;
-    public List<T> data = new ArrayList<>();
+    private int pageIndex, pageSize, totalPages, totalItems;
+    private List<T> data = new ArrayList<>();
+
+    public int getPageIndex()  { return pageIndex; }
+    public int getPageSize()   { return pageSize; }
+    public int getTotalPages() { return totalPages; }
+    public int getTotalItems() { return totalItems; }
+    public List<T> getData()   { return data; }
+
+    // Tiện ích cho JSP
+    public boolean isHasPrev() { return pageIndex > 1; }
+    public boolean isHasNext() { return pageIndex < Math.max(1, totalPages); }
+    public int getPrevPage()   { return Math.max(1, pageIndex - 1); }
+    public int getNextPage()   { return Math.min(Math.max(1, totalPages), pageIndex + 1); }
+    public int getStartRow()   { return (pageIndex - 1) * pageSize; }
+
+    // Setters để servlet set giá trị
+    public void setPageIndex(int v)   { this.pageIndex = v; }
+    public void setPageSize(int v)    { this.pageSize = v; }
+    public void setTotalPages(int v)  { this.totalPages = v; }
+    public void setTotalItems(int v)  { this.totalItems = v; }
+    public void setData(List<T> list) { this.data = (list != null) ? list : new ArrayList<>(); }
   }
 
   @Override
@@ -30,9 +76,11 @@ public class AdminUsersServlet extends HttpServlet {
       throws ServletException, IOException {
 
     // 1) Guard quyền
-    User me = (User) req.getSession().getAttribute("currentUser");
-    if (me == null || !(me.isAdmin() || me.isLeader())) { // tự bạn hiện có isAdmin/isLeader
-      resp.sendError(403); return;
+    HttpSession session = req.getSession(false);
+    User me = (session != null) ? (User) session.getAttribute("currentUser") : null;
+    if (me == null || !(me.isAdmin() || me.isLeader())) {
+      resp.sendError(HttpServletResponse.SC_FORBIDDEN);
+      return;
     }
 
     // 2) Param
@@ -41,6 +89,7 @@ public class AdminUsersServlet extends HttpServlet {
     int page = parseInt(req.getParameter("page"), 1);
     int size = parseInt(req.getParameter("size"), 10);
     if (size <= 0 || size > 100) size = 10;
+    if (page <= 0) page = 1;
     int offset = (page - 1) * size;
 
     // 3) WHERE
@@ -51,7 +100,7 @@ public class AdminUsersServlet extends HttpServlet {
       String kw = "%" + q + "%";
       params.add(kw); params.add(kw); params.add(kw);
     }
-    if ("ACTIVE".equalsIgnoreCase(status))   where.append(" AND status = 1 ");
+    if ("ACTIVE".equalsIgnoreCase(status))      where.append(" AND status = 1 ");
     else if ("INACTIVE".equalsIgnoreCase(status)) where.append(" AND status = 0 ");
 
     // 4) SQL (SQL Server)
@@ -62,34 +111,52 @@ public class AdminUsersServlet extends HttpServlet {
         "FROM Users " + where + " ORDER BY id DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 
     Page<Row> pageObj = new Page<>();
-    pageObj.pageIndex = page; pageObj.pageSize = size;
+    pageObj.setPageIndex(page);
+    pageObj.setPageSize(size);
 
     try (Connection cn = DBConnection.getConnection()) {
       // count
       try (PreparedStatement ps = cn.prepareStatement(sqlCount)) {
         bind(ps, params);
-        try (ResultSet rs = ps.executeQuery()) { if (rs.next()) pageObj.totalItems = rs.getInt(1); }
+        try (ResultSet rs = ps.executeQuery()) {
+          if (rs.next()) pageObj.setTotalItems(rs.getInt(1));
+        }
       }
+
+      // Điều chỉnh page nếu vượt
+      int totalPages = (int)Math.ceil((pageObj.getTotalItems() * 1.0) / size);
+      if (totalPages == 0) totalPages = 1;
+      if (page > totalPages) {
+        page = totalPages;
+        offset = (page - 1) * size;
+        pageObj.setPageIndex(page);
+      }
+
       // data
       try (PreparedStatement ps = cn.prepareStatement(sqlData)) {
         List<Object> p2 = new ArrayList<>(params);
         p2.add(offset); p2.add(size);
         bind(ps, p2);
+        List<Row> rows = new ArrayList<>();
         try (ResultSet rs = ps.executeQuery()) {
           while (rs.next()) {
             Row r = new Row();
-            r.id = rs.getInt("id");
-            r.username = rs.getString("username");
-            r.fullName = rs.getString("fullName");
-            r.email = rs.getString("email");
-            r.role = rs.getString("role");
-            r.department = rs.getString("department");
-            r.status = rs.getString("status");
-            pageObj.data.add(r);
+            r.setId(rs.getInt("id"));
+            r.setUsername(rs.getString("username"));
+            r.setFullName(rs.getString("fullName")); // alias đảm bảo EL là fullName
+            r.setEmail(rs.getString("email"));
+            r.setRole(rs.getString("role"));
+            r.setDepartment(rs.getString("department"));
+            r.setStatus(rs.getString("status"));
+            rows.add(r);
           }
         }
+        pageObj.setData(rows);
       }
-      pageObj.totalPages = (int)Math.ceil((pageObj.totalItems*1.0)/pageObj.pageSize);
+
+      pageObj.setTotalPages((int)Math.ceil((pageObj.getTotalItems() * 1.0) / size));
+      if (pageObj.getTotalPages() == 0) pageObj.setTotalPages(1);
+
     } catch (SQLException e) {
       throw new ServletException(e);
     }
@@ -102,9 +169,16 @@ public class AdminUsersServlet extends HttpServlet {
     resp.setHeader("Cache-Control", "no-store");
 
     // 7) Audit view
-    try { AuditLog.log(req, "ADMIN_USERS_VIEW", "USER", me.getId(), "q="+q+", status="+status+", page="+page); } catch (Throwable ignored) {}
+    try {
+      AuditLog.log(req, "ADMIN_USERS_VIEW", "USER", me.getId(),
+          "q="+q+", status="+status+", page="+pageObj.getPageIndex());
+    } catch (Throwable ignored) {}
 
+    // 8) Attribute cho JSP
     req.setAttribute("page", pageObj);
+    req.setAttribute("q", q);
+    req.setAttribute("status", status);
+
     req.getRequestDispatcher("/WEB-INF/views/admin/users.jsp").forward(req, resp);
   }
 

@@ -6,6 +6,7 @@
   <meta charset="UTF-8">
   <title>Chi tiết yêu cầu #${r.id}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+<%@ include file="/WEB-INF/views/common/_header.jsp" %>
 
   <style>
     :root{
@@ -168,17 +169,25 @@
         </div>
       </c:if>
 
-      <c:if test="${r.hasAttachment}">
-        <div style="grid-column:1/-1" class="kv">
-          <b>Tệp đính kèm:</b>
-          <div>
-            📎 <c:out value='${r.attachmentName}'/>
-            <c:if test="${not empty r.attachmentUrl}">
-              <a class="btn" style="padding:4px 8px;margin-left:8px" href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
-            </c:if>
-          </div>
-        </div>
-      </c:if>
+    <c:if test="${not empty r.attachmentUrl or not empty r.attachmentPath or not empty r.attachmentName}">
+  <div style="grid-column:1/-1" class="kv">
+    <b>Tệp đính kèm:</b>
+    <div>
+      📎 <c:out value='${empty r.attachmentName ? "file" : r.attachmentName}'/>
+      <c:choose>
+        <c:when test="${not empty r.attachmentUrl}">
+          <a class="btn" style="padding:4px 8px;margin-left:8px"
+             href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
+        </c:when>
+        <c:when test="${not empty r.attachmentPath}">
+          <a class="btn" style="padding:4px 8px;margin-left:8px"
+             href="${pageContext.request.contextPath}/files/${r.attachmentPath}">Tải xuống</a>
+        </c:when>
+      </c:choose>
+    </div>
+  </div>
+</c:if>
+
     </div>
 
     <!-- Hành động -->
@@ -280,5 +289,8 @@
   const msg = url.searchParams.get('msg');
   if (msg) setTimeout(()=>toast(msg), 100);
 </script>
+
+<%@ include file="/WEB-INF/views/common/_footer.jsp" %>
+
 </body>
 </html>
