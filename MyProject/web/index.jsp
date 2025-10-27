@@ -25,6 +25,19 @@
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
         <style>
+            html, body {
+  overflow-x: hidden !important; /* không cho xuất hiện thanh ngang */
+}
+
+#bg-anim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none; /* không bắt sự kiện chuột */
+  will-change: transform;
+  contain: paint; /* chặn tràn */
+}
+
             :root{
                 --bg:#0f1b24;
                 --card:#0f172a;
@@ -1238,7 +1251,7 @@
                     body.addEventListener('pointermove', e => {
                         const x = e.clientX / window.innerWidth - .5;
                         const y = e.clientY / window.innerHeight - .5;
-                        gradLayer.style.transform = `translate(\${x * 24}px, \${y * 18}px) scale(1.02)`;
+gradLayer.style.transform = `translate(${x * 24}px, ${y * 18}px)`; // KHÔNG scale
                     });
                     body.addEventListener('pointerleave', () => gradLayer.style.transform = '');
 

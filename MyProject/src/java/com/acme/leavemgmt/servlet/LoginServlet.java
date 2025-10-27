@@ -1,8 +1,8 @@
 package com.acme.leavemgmt.servlet;
 
-import com.acme.leavemgmt.dao.ActivityDAO;
-import com.acme.leavemgmt.dao.RequestDAO;
+import com.acme.leavemgmt.dao.UserDAO;           // dùng DAO đăng nhập chuẩn
 import com.acme.leavemgmt.model.User;
+import com.acme.leavemgmt.util.AuditLog;
 import com.acme.leavemgmt.util.WebUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -14,11 +14,12 @@ import java.sql.SQLException;
 @WebServlet(name = "LoginServlet", urlPatterns = {"/login"})
 public class LoginServlet extends HttpServlet {
 
-    private final RequestDAO dao = new RequestDAO();
+    private final UserDAO userDAO = new UserDAO(); // nếu bạn muốn giữ RequestDAO, đổi lại cho khớp dự án
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+        // Trang login – nếu bạn dùng index.jsp làm trang login thì giữ như cũ
         req.getRequestDispatcher("/WEB-INF/views/index.jsp").forward(req, resp);
     }
 
@@ -39,45 +40,41 @@ public class LoginServlet extends HttpServlet {
         }
 
         try {
-            User u = dao.findByUsernameAndPassword(username, password); // trả về null nếu sai
+            // Đăng nhập (trả u nếu đúng & status=1, null nếu sai)
+            User u = userDAO.findByUsernameAndPassword(username, password);
+
             if (u == null) {
+                // Log thất bại
+                AuditLog.log(req, "LOGIN_FAIL", "USER", null, "Sai tài khoản/mật khẩu");
                 req.setAttribute("error", "Sai tài khoản hoặc mật khẩu.");
                 req.getRequestDispatcher("/WEB-INF/views/index.jsp").forward(req, resp);
                 return;
             }
 
-            // --- Ngăn session fixation & set đúng session keys ---
+            // Reset session để tránh session fixation
             HttpSession old = req.getSession(false);
-            if (old != null) {
-                old.invalidate();
-            }
-            HttpSession session = req.getSession(true); // tạo session mới
-            session.setAttribute("currentUser", u);     // <<< quan trọng: key chuẩn dùng bởi RoleFilter/JSP
+            if (old != null) old.invalidate();
 
-            // log
-            new ActivityDAO().log(
-                    u.getId(),
-                    "LOGIN", "USER", u.getId(),
-                    "Đăng nhập thành công",
-                    WebUtil.clientIp(req), WebUtil.userAgent(req)
-            );
-
-            // (tuỳ bạn, có thể set thêm các alias nếu view cũ đang dùng)
+            HttpSession session = req.getSession(true);
+            session.setAttribute("currentUser", u);      // key chuẩn dùng toàn hệ thống
+            // (tuỳ chọn) alias cho view cũ
             session.setAttribute("fullName", u.getFullName());
             session.setAttribute("role", u.getRole());
             session.setAttribute("department", u.getDepartment());
 
-            // --- Điều hướng sau login ---
+            // Log thành công
+            AuditLog.log(req, "LOGIN", "USER", u.getId(), "Đăng nhập thành công");
+
+            // Điều hướng
             String ctx = req.getContextPath();
-            String dest = (u.canAccessAdminDashboard()) ? "/admin" : "/request/list";
+            String dest = u.canAccessAdminDashboard() ? "/admin" : "/request/list";
             resp.sendRedirect(ctx + dest);
+            return;
 
         } catch (SQLException e) {
             throw new ServletException("Database error during login", e);
         }
     }
 
-    private static String trim(String s) {
-        return s == null ? "" : s.trim();
-    }
+    private static String trim(String s) { return s == null ? "" : s.trim(); }
 }

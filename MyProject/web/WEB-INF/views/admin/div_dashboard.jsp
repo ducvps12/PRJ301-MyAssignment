@@ -1,11 +1,14 @@
-<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ include file="/WEB-INF/views/common/_header.jsp" %>
-<div class="wrap">
-  <h2>Division Dashboard – ${sessionScope.currentUser.department}</h2>
+<%@ page contentType="text/html; charset=UTF-8" %>
+<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><title>Division Dashboard</title></head>
+<body>
+<h1>Division Dashboard</h1>
+<p>Xin chào, ${sessionScope.currentUser.fullName} – Phòng: ${sessionScope.currentUser.department}</p>
 
-  <p>Xin chào, ${sessionScope.currentUser.fullName}</p>
-  <p>Tổng số yêu cầu nghỉ phép trong division: ${stats.totalRequests}</p>
-  <p>Đã duyệt tháng này: ${stats.approvedThisMonth}</p>
-  <p>Đang chờ xử lý: ${stats.pendingCount}</p>
-</div>
-<%@ include file="/WEB-INF/views/common/_footer.jsp" %>
+<c:if test="${not empty stats}">
+  <!-- render stats ở đây -->
+  <pre>${stats}</pre>
+</c:if>
+</body>
+</html>
