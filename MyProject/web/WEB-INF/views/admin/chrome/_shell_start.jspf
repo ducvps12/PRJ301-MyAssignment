@@ -1,0 +1,48 @@
+
+<!-- Ch? khung: sidebar + topbar + m? content. KHÔNG footer, KHÔNG demo. -->
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" aria-label="Thanh ?i?u h??ng">
+    <div style="padding:14px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px">
+      <div class="avatar">M</div>
+      <div>
+        <div class="brand">LeaveMgmt</div>
+        <div class="muted" style="font-size:12px">Admin panel</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="section">Navigation</div>
+      <a class="item ${page == 'dashboard' ? 'active' : ''}" href="${cp}/admin">? <span>Home</span></a>
+      <a class="item ${page == 'users' ? 'active' : ''}" href="${cp}/admin/users">? <span>Users</span></a>
+      <a class="item ${page == 'requests' ? 'active' : ''}" href="${cp}/admin/request/list">? <span>Requests</span></a>
+      <a class="item ${page == 'activity' ? 'active' : ''}" href="${cp}/admin/activity">? <span>Activity log</span></a>
+
+      <div class="section">System</div>
+      <a class="item ${page == 'settings' ? 'active' : ''}" href="${cp}/admin/settings">?? <span>Settings</span></a>
+      <a class="item" href="${cp}/logout">? <span>Sign out</span></a>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn" onclick="toggleSidebar()" aria-label="M?/?óng menu" title="Toggle sidebar (Alt+B)">?</button>
+        <div class="brand">Admin</div>
+        <span class="muted" style="font-size:12px">| <c:out value="${pageTitle != null ? pageTitle : 'Dashboard'}"/></span>
+      </div>
+
+      <div class="search" role="search">
+        ? <input type="search" name="q" placeholder="Tìm nhanh (Ctrl+/)" aria-label="Tìm ki?m" />
+      </div>
+
+      <div class="top-actions">
+        <span class="chip">VN</span>
+        <a class="btn notif" href="${cp}/admin/notifications" title="Thông báo">?</a>
+        <a class="btn" href="${cp}/profile" title="Tài kho?n">????</a>
+      </div>
+    </div>
+
+    <!-- Trang s? render n?i dung vào ?ây -->
+    <div class="content" id="main">

@@ -206,9 +206,41 @@
 </servlet-mapping>
 
 
+<servlet>
+  <servlet-name>ActivityServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.ActivityServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+  <servlet-name>ActivityServlet</servlet-name>
+  <url-pattern>/activity</url-pattern>
+</servlet-mapping>
+
+<servlet-mapping>
+  <servlet-name>ActivityServlet</servlet-name>
+  <url-pattern>/admin/activity</url-pattern>
+</servlet-mapping>
+
+
 
   <!-- ===================== ERROR PAGES ===================== -->
-
+<!-- Error pages -->
+<error-page>
+  <error-code>403</error-code>
+  <location>/WEB-INF/views/errors/403.jsp</location>
+</error-page>
+<error-page>
+  <error-code>404</error-code>
+  <location>/WEB-INF/views/errors/404.jsp</location>
+</error-page>
+<error-page>
+  <error-code>500</error-code>
+  <location>/WEB-INF/views/errors/500.jsp</location>
+</error-page>
+<error-page>
+  <exception-type>java.lang.Throwable</exception-type>
+  <location>/WEB-INF/views/errors/500.jsp</location>
+</error-page>
 
 <!-- Bật/tắt panel debug -->
 <context-param>

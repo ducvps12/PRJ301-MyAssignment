@@ -130,6 +130,46 @@
 <noscript><style>.loading-overlay{display:none!important}</style></noscript>
 
 <style>
+    /* === Brand / Logo size === */
+:root{
+  --logo-sm: 28px;    /* mobile */
+  --logo-md: 34px;    /* tablet */
+  --logo-lg: 40px;    /* desktop */
+}
+
+.app-header.pro .brand{
+  display:flex; align-items:center; gap:10px;
+}
+
+.app-header.pro .brand img{
+  height: var(--logo-sm);
+  width: auto;
+  display:block;
+  object-fit: contain;
+}
+
+/* text đi cùng logo cũng lớn hơn chút */
+.app-header.pro .brand-text{
+  font-weight: 700;
+  font-size: 18px;          /* mobile */
+  letter-spacing:.2px;
+}
+
+/* Tablet */
+@media (min-width: 640px){
+  .app-header.pro .brand img{ height: var(--logo-md); }
+  .app-header.pro .brand-text{ font-size: 19px; }
+}
+
+/* Desktop */
+@media (min-width: 992px){
+  .app-header.pro .brand img{ height: var(--logo-lg); }
+  .app-header.pro .brand-text{ font-size: 20px; }
+}
+
+/* đảm bảo khu vực trái canh giữa theo chiều dọc */
+.app-header.pro .left{ display:flex; align-items:center; gap:12px; }
+
   :root{
     --maxw:1180px;
     --bd:#e5e7eb; --tx:#111827; --muted:#6b7280; --bg:#f7f7fb; --card:#fff;

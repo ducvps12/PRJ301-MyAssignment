@@ -1,7 +1,8 @@
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
-<%@include file="/WEB-INF/views/common/_header.jsp"%>
 
+<%@ include file="/WEB-INF/views/common/_admin_header.jsp" %>
+<%@ include file="/WEB-INF/views/common/_admin_sidebar.jsp" %>
 <c:set var="cp" value="${pageContext.request.contextPath}" />
 
 <div class="container users-page">
@@ -122,9 +123,12 @@
             <td data-key="idx">${(page.pageIndex-1)*page.pageSize + vs.index + 1}</td>
             <td data-key="fullName">
               <div class="name-cell">
-                <span class="avatar" aria-hidden="true">${fn:substring(u.fullName,0,1)}</span>
-                <span class="name">${u.fullName}</span>
+<span class="avatar" aria-hidden="true" title="${u.fullName}">
+  ${fn:substring(u.fullName,0,1)}
+</span>                <span class="name">${u.fullName}</span>
               </div>
+              
+              
             </td>
             <td data-key="email">
               <span class="mono email">${u.email}</span>
@@ -241,7 +245,30 @@ html,body{margin:0}
 body{font:14px/1.55 system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--tx);background:linear-gradient(120deg,rgba(42,160,255,.06),transparent 40%) , var(--bg);}
 
 /* Container */
-.container.users-page{max-width:1180px;margin:24px auto;padding:0 16px}
+/* === WIDER USERS LAYOUT === */
+/* Nới container ra theo màn hình, nhưng vẫn giữ mép an toàn */
+.container.users-page{
+  /* từ 1180px -> tới 96vw, chặn trần ở 1600px */
+  max-width: min(1600px, 96vw);
+}
+
+/* Tăng kích thước chữ + khoảng cách hàng một chút cho dễ đọc */
+.table{ font-size:15px }
+.table td{ padding:12px 14px }
+.compact .table td{ padding:8px 10px } /* compact vẫn gọn */
+
+/* Cho bảng nhìn được nhiều hàng hơn */
+.table-wrap{
+  max-height: 75vh;   /* 62vh -> 75vh */
+}
+
+/* Tăng độ rộng vài cột dễ bị chật */
+td[data-key="email"]{ max-width: 360px }
+td[data-key="username"]{ max-width: 200px }
+td[data-key="department"]{ max-width: 220px }
+
+/* Nếu muốn full-bleed hơn nữa, bật dòng dưới: */
+/* .container.users-page{ max-width: min(1760px, 98vw); } */
 
 /* Head */
 .page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 16px}
@@ -330,6 +357,105 @@ body{font:14px/1.55 system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--tx);ba
 :root[data-theme="light"]{
   --bg:#f7f8fb; --card:#fff; --card-2:#f9fafb; --tx:#111827; --muted:#6b7280; --bd:#e5e7eb; --shadow:0 12px 30px rgba(17,24,39,.08); --chip:#eef2f7; --chipg:#f5f7fb;
 }
+
+/* ========= USERS REFINEMENT PACK ========= */
+
+/* Typography & density nhẹ hơn */
+.table thead th{ font-weight:700; letter-spacing:.2px }
+.table td{ padding:12px 12px }          /* thoáng hơn chút */
+.compact .table td{ padding:7px 8px }   /* compact vẫn gọn */
+
+/* Zebra + hover có chiều sâu */
+.table tbody tr:nth-child(odd){ background: color-mix(in oklab, var(--card) 92%, #000 8%) }
+:root[data-theme="light"] .table tbody tr:nth-child(odd){ 
+  background: color-mix(in oklab, var(--card) 96%, #000 4%) 
+}
+.table tbody tr:hover{ background: color-mix(in oklab, var(--pri) 12%, var(--card) 88%) }
+
+/* Sticky header có bóng khi scroll */
+.table-wrap{ position:relative }
+.table thead th{
+  background: linear-gradient(180deg, color-mix(in oklab, var(--card) 94%, transparent 6%), var(--card));
+}
+.table thead::after{
+  content:""; position:sticky; top:38px; display:block; height:0; 
+  box-shadow: 0 8px 12px -8px rgb(0 0 0 / .35); pointer-events:none;
+}
+
+/* Cột chọn & hành động */
+.table th.sel,.table td.sel{ width:40px }
+.actions{ gap:8px }
+.actions .btn.small{ border-radius:8px; padding:6px 10px }
+.actions .btn.small.danger{ background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.35) }
+
+/* Tên + avatar mịn hơn */
+.name-cell{ gap:12px }
+.avatar{
+  width:28px;height:28px;border-radius:10px;
+  color:#fff; font-weight:800; font-size:13px;
+  box-shadow: inset 0 -8px 16px rgba(0,0,0,.15);
+  border:1px solid color-mix(in oklab, var(--pri2) 60%, #000 40%);
+}
+:root[data-theme="light"] .avatar{ color:#0b1220 }
+
+/* Email mono trông gọn và có nút copy tinh tế */
+td[data-key="email"]{ display:flex; align-items:center; gap:8px }
+.icon-btn.copy{
+  width:28px;height:28px;border-radius:8px;border:1px solid var(--bd);
+  background:var(--card-2); font-size:14px; line-height:1; opacity:.75;
+}
+.icon-btn.copy:hover{ opacity:1; transform:translateY(-1px) }
+
+/* Chip role – màu theo role (dùng data-role ở trên) */
+.chip.role{ 
+  font-weight:600; letter-spacing:.2px; 
+  padding:4px 10px; border-radius:999px; border:0;
+}
+.chip.role[data-role="ADMIN"]      { background:linear-gradient(180deg,#f59e0b22,#f59e0b33); color:#fbbf24 }
+.chip.role[data-role="DIV_LEADER"] { background:linear-gradient(180deg,#22c55e22,#22c55e33); color:#34d399 }
+.chip.role[data-role="TEAM_LEAD"]  { background:linear-gradient(180deg,#06b6d422,#06b6d433); color:#22d3ee }
+.chip.role[data-role="QA_LEAD"]    { background:linear-gradient(180deg,#a855f722,#a855f733); color:#c084fc }
+.chip.role[data-role="STAFF"]      { background:linear-gradient(180deg,#64748b22,#64748b33); color:#a3b2c3 }
+
+/* Badge trạng thái – sắc nét, đồng bộ */
+.badge.status{
+  font-weight:700; letter-spacing:.3px; border:0; padding:5px 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 45%, transparent 55%);
+}
+.badge.status.ACTIVE,
+.badge.status[data-status="ACTIVE"]{
+  color:#22c55e;
+  background:linear-gradient(180deg,#22c55e22,#22c55e30);
+}
+.badge.status.INACTIVE,
+.badge.status[data-status="INACTIVE"]{
+  color:#ef4444;
+  background:linear-gradient(180deg,#ef444422,#ef444430);
+}
+
+/* Toolbar nhỏ – bóng & khoảng cách */
+.page-head{ margin-bottom:10px }
+.page-head .btn{ border-radius:12px }
+.page-head .btn.pri{ box-shadow:0 8px 18px rgb(42 160 255 / .25) }
+
+/* Card & bộ lọc – mềm mại hơn */
+.card{ border-radius:16px }
+.filters{ padding:16px 14px }
+.field label{ font-weight:600 }
+.input{ border-radius:12px }
+.input:focus{ outline:none; box-shadow:0 0 0 3px color-mix(in oklab, var(--pri) 40%, transparent 60%) }
+
+/* Paging – nút active rõ nét */
+.paging .btn.small.active{
+  background:linear-gradient(180deg,var(--pri),var(--pri2));
+  color:#fff; border-color:transparent;
+}
+
+/* Mini util: text truncate các cột dài */
+td[data-key="email"], td[data-key="username"], td[data-key="department"]{
+  max-width: 240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
 </style>
 
 <script>
@@ -596,4 +722,11 @@ btnExportCsv.addEventListener("click", exportCSV);
 })();
 </script>
 
-<%@include file="/WEB-INF/views/common/_footer.jsp"%>
+    </div> <!-- /.content -->
+  </main>
+</div> <!-- /.layout -->
+
+
+<%@ include file="/WEB-INF/views/common/_admin_footer.jsp" %>
+</div> <!-- /.content / đóng ở footer -->
+</main></div></body></html>
