@@ -2,6 +2,7 @@ package com.acme.leavemgmt.model;
 
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
@@ -30,6 +31,8 @@ public class Request implements Serializable {
     public static final String ST_CANCELLED = "cancelled";
 // Request.java
     private String leaveTypeName; // tên hiển thị
+    private LocalDateTime approvedAt;
+    private LocalDateTime createdAt;
 
     public String getLeaveTypeName() {
         if (leaveTypeName != null && !leaveTypeName.isBlank()) {
@@ -443,15 +446,62 @@ public boolean isHasAttachment() {
         return Objects.hash(id);
     }
 
-    public void setApproverId(Long safeGetLong) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    public void setRequesterId(long aLong) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    public void setRequesterDepartment(String safeGet) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
+    // --- Alias cho DAO cũ dùng setFrom()/setTo() ---
+public void setFrom(LocalDate fromDate) {
+    this.startDate = fromDate;
 }
+
+public void setTo(LocalDate toDate) {
+    this.endDate = toDate;
+}
+
+    // === Fields ===
+    private Long approverId;           // dùng Long để cho phép null
+    private Long requesterId;          // dùng Long để cho phép null
+    private String requesterDepartment;
+
+    // === Getters (EL/JSP cần các getter này) ===
+    public Long getApproverId() { return approverId; }
+    public Long getRequesterId() { return requesterId; }
+    public String getRequesterDepartment() { return requesterDepartment; }
+
+    // === Setters — FIX lỗi UnsupportedOperationException ===
+    public void setApproverId(Long approverId) {
+        this.approverId = approverId;
+    }
+
+    // Giữ nguyên chữ ký bạn đang có (long) và hỗ trợ cả Long nếu cần
+    public void setRequesterId(long requesterId) {
+        this.requesterId = requesterId; // auto-box sang Long
+    }
+    // overload phòng khi nơi khác truyền vào Long (có thể null)
+    public void setRequesterId(Long requesterId) {
+        this.requesterId = requesterId;
+    }
+
+    public void setRequesterDepartment(String requesterDepartment) {
+        this.requesterDepartment = (requesterDepartment == null)
+                ? null
+                : requesterDepartment.trim();
+    }
+
+
+
+    // CÁI BẠN ĐANG THIẾU: setApprovedAt(...)
+    public void setApprovedAt(LocalDateTime approvedAt) { this.approvedAt = approvedAt; }
+
+// *** CÁI ĐANG THIẾU ***
+public LocalDateTime getCreatedAt() {  LocalDateTime createdAt = null;
+return createdAt; }
+public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    // (tuỳ chọn) fluent style cho tiện khi map từ ResultSet
+    public Request withApproverId(Long v){ this.approverId = v; return this; }
+    public Request withRequesterId(Long v){ this.requesterId = v; return this; }
+    public Request withRequesterDepartment(String v){ this.requesterDepartment = (v==null?null:v.trim()); return this; }
+}
+
+
+    
+
+

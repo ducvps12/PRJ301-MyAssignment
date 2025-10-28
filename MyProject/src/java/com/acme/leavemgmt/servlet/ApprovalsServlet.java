@@ -8,7 +8,10 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @WebServlet(name="ApprovalsServlet", urlPatterns={"/approvals","/approvals/"})
 public class ApprovalsServlet extends HttpServlet {
@@ -22,7 +25,12 @@ public class ApprovalsServlet extends HttpServlet {
     if (!(me.isAdmin() || me.isLeader())) { resp.sendError(403); return; }
 
     // Lấy các đơn PENDING mà me được quyền duyệt
-    List<Request> items = requestDAO.findPendingForApprover(me);
+    List<Request> items = null;
+      try {
+          items = requestDAO.findPendingForApprover(me);
+      } catch (SQLException ex) {
+          Logger.getLogger(ApprovalsServlet.class.getName()).log(Level.SEVERE, null, ex);
+      }
     req.setAttribute("items", items);
     req.getRequestDispatcher("/WEB-INF/views/request/approvals.jsp").forward(req, resp);
   }

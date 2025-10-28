@@ -2,8 +2,8 @@ package com.acme.leavemgmt.servlet.admin;
 
 import com.acme.leavemgmt.dao.StatsDAO;
 import com.acme.leavemgmt.model.User;
-import com.acme.leavemgmt.util.Csrf;
 import com.acme.leavemgmt.util.AuditLog;
+import com.acme.leavemgmt.util.Csrf;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -26,62 +26,94 @@ public class DivDashboardServlet extends HttpServlet {
         HttpSession session = req.getSession(false);
         User me = (session != null) ? (User) session.getAttribute("currentUser") : null;
         if (me == null) {
-            String next = URLEncoder.encode(req.getRequestURI()
-                    + (req.getQueryString() != null ? "?" + req.getQueryString() : ""), StandardCharsets.UTF_8.name());
+            String next = URLEncoder.encode(
+                    req.getRequestURI() + (req.getQueryString() != null ? "?" + req.getQueryString() : ""),
+                    StandardCharsets.UTF_8.name()
+            );
             resp.sendRedirect(req.getContextPath() + "/login?next=" + next);
             return;
         }
 
-        boolean isAdmin   = me.isAdmin();
-        boolean isLeader  = me.isLeader();
+        // 2) Quyền
+        boolean isAdmin  = safeBoolean(me.isAdmin());
+        boolean isLeader = safeBoolean(me.isLeader());
         if (!isAdmin && !isLeader) {
             resp.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
 
-        // 2) Chọn phòng ban: Admin có thể xem dept bất kỳ qua ?dept=QA|IT|SALE
-        String dept = req.getParameter("dept");
-        if (!isAdmin || dept == null || dept.isBlank()) {
-            dept = safe(me.getDepartment()); // leader luôn khoá theo phòng của họ
+        // 3) Chọn phòng ban
+        //    - Admin: có thể truyền ?dept=IT|SALE|QA ...
+        //    - Leader: luôn khoá theo phòng của họ
+        String deptParam = trimOrNull(req.getParameter("dept"));
+        String dept;
+        if (isAdmin && deptParam != null && !deptParam.isBlank()) {
+            dept = deptParam;
+        } else {
+            dept = trimOrEmpty(me.getDepartment());
         }
 
-        // 3) Khoảng ngày (tuỳ chọn) – mặc định hôm nay
-        LocalDate from = parseDate(req.getParameter("from"), LocalDate.now());
-        LocalDate to   = parseDate(req.getParameter("to"),   LocalDate.now());
-        if (to.isBefore(from)) { LocalDate t = from; from = to; to = t; }
+        // 4) Khoảng ngày (tuỳ chọn hiển thị KPI); mặc định hôm nay nếu không nhập
+        LocalDate today = LocalDate.now();
+        LocalDate from = parseOrDefault(req.getParameter("from"), today);
+        LocalDate to   = parseOrDefault(req.getParameter("to"),   today);
+        if (to.isBefore(from)) { // hoán đổi nếu user nhập ngược
+            LocalDate t = from; from = to; to = t;
+        }
 
-        // 4) Lấy dữ liệu
-        //   Yêu cầu: StatsDAO tự handle SQLException và trả về list/map rỗng khi lỗi.
+        // 5) Lấy dữ liệu
+        //    Yêu cầu: StatsDAO tự catch SQLException và trả về đối tượng rỗng khi có lỗi.
         var stats    = statsDAO.getDivisionStats(dept, from, to);
-        var pending  = statsDAO.getDivisionPendingRequests(dept);     // trạng thái PENDING
-        var todayOff = statsDAO.getDivisionTodayOff(dept, LocalDate.now());
+        var pending  = statsDAO.getDivisionPendingRequests(dept);          // KHÔNG lọc theo ngày
+        var todayOff = statsDAO.getDivisionTodayOff(dept, today);          // Lọc đúng theo "hôm nay"
 
-        // 5) CSRF token cho form Approve/Reject
+        // 6) CSRF cho form Approve/Reject
         String csrf = Csrf.ensureToken(req.getSession());
-        req.setAttribute("csrf", csrf);
 
-        // 6) Set attribute cho view
+        // 7) Gán attribute cho JSP
+        req.setAttribute("csrf", csrf);
         req.setAttribute("dept", dept);
         req.setAttribute("canSwitchDept", isAdmin);
-        req.setAttribute("from", from);
-        req.setAttribute("to", to);
+        // Input date trong JSP đọc string/ISO ok, nên set toString()
+        req.setAttribute("from", from.toString());
+        req.setAttribute("to",   to.toString());
         req.setAttribute("stats", stats);
         req.setAttribute("pending", pending);
         req.setAttribute("todayOff", todayOff);
 
-        // 7) No-store + audit nhẹ
+        // 8) No-store + audit
         resp.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         resp.setHeader("Pragma", "no-cache");
         resp.setDateHeader("Expires", 0);
-        try { AuditLog.log(req, "DIV_DASHBOARD_VIEW", "USER", me.getId(), "dept="+dept+", from="+from+", to="+to); } catch (Throwable ignore) {}
+        try {
+            AuditLog.log(req, "DIV_DASHBOARD_VIEW", "USER", me.getId(),
+                    "dept=" + dept + ", from=" + from + ", to=" + to);
+        } catch (Throwable ignore) {}
 
+        // 9) Forward
         req.getRequestDispatcher("/WEB-INF/views/admin/div_dashboard.jsp").forward(req, resp);
     }
 
-    /* ===== helpers ===== */
-    private static String safe(String s){ return s == null ? "" : s.trim(); }
-    private static LocalDate parseDate(String s, LocalDate d){
-        try { return (s == null || s.isBlank()) ? d : LocalDate.parse(s); }
-        catch (Exception e){ return d; }
+    /* ===== Helpers ===== */
+
+    private static String trimOrNull(String s) {
+        return (s == null) ? null : s.trim();
+    }
+
+    private static String trimOrEmpty(String s) {
+        return (s == null) ? "" : s.trim();
+    }
+
+    private static boolean safeBoolean(Boolean b) {
+        return b != null && b;
+    }
+
+    private static LocalDate parseOrDefault(String s, LocalDate dflt) {
+        try {
+            if (s == null || s.isBlank()) return dflt;
+            return LocalDate.parse(s.trim());
+        } catch (Exception e) {
+            return dflt;
+        }
     }
 }
