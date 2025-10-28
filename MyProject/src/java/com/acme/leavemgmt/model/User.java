@@ -148,20 +148,21 @@ public class User implements Serializable {
 
     /** Leader: DIV_LEADER | TEAM_LEAD | QA_LEAD | (hậu tố *_LEAD/*_LEADER) */
     public boolean isLead() {
-        String rc = getRoleCode();
-        if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
-        return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
-            || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
-    }
+    String rc = getRoleCode();
+    if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
+    return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
+        || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
+}
 
-    /** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
-    public boolean isLeader() { return isLead(); }
+/** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
+public boolean isLeader() { return isLead(); }
 
-    public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
+public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
 
-    public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }
-    public boolean canAccessAdminUsers()     { return isAdmin(); }
-    public boolean canApproveRequests()      { return isAdmin() || isLead(); }
+public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }
+public boolean canAccessAdminUsers()     { return isAdmin(); }
+public boolean canApproveRequests()      { return isAdmin() || isLead(); }
+
 
     // ===== Display / Debug =====
     public String getDisplayName() {

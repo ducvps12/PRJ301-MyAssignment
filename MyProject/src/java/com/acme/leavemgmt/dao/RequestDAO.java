@@ -10,6 +10,7 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.*;
 import java.sql.Date;
+import java.time.LocalDateTime;
 
 public class RequestDAO {
 
@@ -1696,6 +1697,115 @@ public class RequestDAO {
             ps.setInt(4, requestId);
             return ps.executeUpdate() == 1;
         }
+    }
+
+    // === API chính bạn cần ===
+    public List<Request> findPendingForApprover(User me) throws SQLException {
+        // Phân nhánh theo role
+        String role = (me.getRole() == null ? "" : me.getRole().toUpperCase());
+
+        if ("ADMIN".equals(role)) {
+            // ADMIN thấy tất cả pending
+            String sql = ""
+                + "SELECT r.* , u.department AS requester_department "
+                + "FROM requests r "
+                + "JOIN users u ON u.id = r.requester_id "
+                + "WHERE r.status = 'PENDING' "
+                + "ORDER BY r.created_at DESC";
+            return query(sql /* no extra params */);
+        }
+
+        if ("MANAGER".equals(role)) {
+            // MANAGER: cùng phòng hoặc thuộc cây cấp dưới (đệ quy qua manager_id)
+            String sql = ""
+                + "WITH RECURSIVE sub AS ( "
+                + "  SELECT id FROM users WHERE manager_id = ? "
+                + "  UNION ALL "
+                + "  SELECT u.id FROM users u JOIN sub s ON u.manager_id = s.id "
+                + ") "
+                + "SELECT r.* , u.department AS requester_department "
+                + "FROM requests r "
+                + "JOIN users u ON u.id = r.requester_id "
+                + "WHERE r.status = 'PENDING' "
+                + "  AND (u.department = ? OR u.id IN (SELECT id FROM sub)) "
+                + "ORDER BY r.created_at DESC";
+            return query(sql, me.getId(), me.getDepartment());
+        }
+
+        // APPROVER/USER: chỉ thấy những request được assign cho mình
+        String sql = ""
+            + "SELECT r.* , u.department AS requester_department "
+            + "FROM requests r "
+            + "JOIN users u ON u.id = r.requester_id "
+            + "WHERE r.status = 'PENDING' "
+            + "  AND r.approver_id = ? "
+            + "ORDER BY r.created_at DESC";
+        return query(sql, me.getId());
+    }
+
+    // === Helper query chung (varargs) ===
+    private List<Request> query(String sql, Object... params) throws SQLException {
+    try (Connection cn = DBConnection.getConnection();
+             PreparedStatement ps = cn.prepareStatement(sql)) {
+
+            // bind params
+            for (int i = 0; i < params.length; i++) {
+                Object p = params[i];
+                if (p instanceof Integer)       ps.setInt(i + 1, (Integer) p);
+                else if (p instanceof Long)     ps.setLong(i + 1, (Long) p);
+                else if (p instanceof String)   ps.setString(i + 1, (String) p);
+                else if (p instanceof java.util.Date)
+                    ps.setTimestamp(i + 1, new Timestamp(((java.util.Date) p).getTime()));
+                else if (p instanceof LocalDate)
+                    ps.setDate(i + 1, Date.valueOf((LocalDate) p));
+                else if (p instanceof LocalDateTime)
+                    ps.setTimestamp(i + 1, Timestamp.valueOf((LocalDateTime) p));
+                else if (p == null)            ps.setObject(i + 1, null);
+                else                            ps.setObject(i + 1, p);
+            }
+
+            List<Request> list = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(mapRequest(rs));
+            }
+            return list;
+        }
+    }
+
+    // === Mapper: chỉnh theo schema của bạn nếu khác ===
+    private Request mapRequest(ResultSet rs) throws SQLException {
+        Request r = new Request();
+        r.setId((int) rs.getLong("id"));
+        r.setRequesterId(rs.getLong("requester_id"));
+        r.setApproverId(safeGetLong(rs, "approver_id"));
+        r.setType(safeGet(rs, "type"));
+        r.setReason(safeGet(rs, "reason"));
+        r.setStatus(safeGet(rs, "status"));
+
+        // Ngày từ/đến có thể là DATE hoặc TIMESTAMP
+        r.setFrom(rs.getObject("from_date") != null
+                ? rs.getDate("from_date").toLocalDate() : null);
+        r.setTo(rs.getObject("to_date") != null
+                ? rs.getDate("to_date").toLocalDate() : null);
+
+        r.setCreatedAt(rs.getObject("created_at") != null
+                ? rs.getTimestamp("created_at").toLocalDateTime() : null);
+        r.setApprovedAt(rs.getObject("approved_at") != null
+                ? rs.getTimestamp("approved_at").toLocalDateTime() : null);
+
+        // optional: department của requester (do JOIN users u)
+        r.setRequesterDepartment(safeGet(rs, "requester_department"));
+
+        return r;
+    }
+
+    private static String safeGet(ResultSet rs, String col) {
+        try { String v = rs.getString(col); return rs.wasNull() ? null : v; }
+        catch (SQLException e) { return null; }
+    }
+    private static Long safeGetLong(ResultSet rs, String col) {
+        try { long v = rs.getLong(col); return rs.wasNull() ? null : v; }
+        catch (SQLException e) { return null; }
     }
 
 }

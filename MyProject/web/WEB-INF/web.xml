@@ -171,22 +171,44 @@
   </filter-mapping>
 
   <!-- RoleFilter: kiểm tra quyền cho khu vực admin & duyệt -->
-  <filter>
-    <filter-name>RoleFilter</filter-name>
-    <filter-class>com.acme.leavemgmt.filter.RoleFilter</filter-class>
-  </filter>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/admin/*</url-pattern>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/request/approve</url-pattern>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/request/approve/*</url-pattern>
-  </filter-mapping>
+ <filter>
+  <filter-name>RoleFilter</filter-name>
+  <filter-class>com.acme.leavemgmt.filter.RoleFilter</filter-class>
+</filter>
+
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/admin/*</url-pattern>
+</filter-mapping>
+
+<!-- Trang duyệt + trang danh sách phê duyệt -->
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/request/approve</url-pattern>
+</filter-mapping>
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/request/approve/*</url-pattern>
+</filter-mapping>
+
+<!-- Nếu menu bạn dùng path “/approvals” (UI đang ghi Approvals) thì thêm: -->
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/approvals</url-pattern>
+</filter-mapping>
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/approvals/*</url-pattern>
+</filter-mapping>
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/approvals</url-pattern>
+</filter-mapping>
+<filter-mapping>
+  <filter-name>RoleFilter</filter-name>
+  <url-pattern>/approvals/*</url-pattern>
+</filter-mapping>
+
 
 <!-- Servlet -->
 <servlet>
