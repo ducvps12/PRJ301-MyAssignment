@@ -6,7 +6,10 @@ import com.acme.leavemgmt.util.AuditLog;
 import com.acme.leavemgmt.util.Csrf;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.*;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -34,7 +37,7 @@ public class DivDashboardServlet extends HttpServlet {
             return;
         }
 
-        // 2) Quyền
+        // 2) Check quyền (admin hoặc leader)
         boolean isAdmin  = safeBoolean(me.isAdmin());
         boolean isLeader = safeBoolean(me.isLeader());
         if (!isAdmin && !isLeader) {
@@ -42,46 +45,49 @@ public class DivDashboardServlet extends HttpServlet {
             return;
         }
 
-        // 3) Chọn phòng ban
-        //    - Admin: có thể truyền ?dept=IT|SALE|QA ...
-        //    - Leader: luôn khoá theo phòng của họ
+        // 3) Xác định phòng ban được xem
+        //    - Admin: được chọn qua ?dept=...
+        //    - Leader: ép theo department của user
         String deptParam = trimOrNull(req.getParameter("dept"));
         String dept;
         if (isAdmin && deptParam != null && !deptParam.isBlank()) {
             dept = deptParam;
         } else {
+            // phòng của chính user
             dept = trimOrEmpty(me.getDepartment());
         }
 
-        // 4) Khoảng ngày (tuỳ chọn hiển thị KPI); mặc định hôm nay nếu không nhập
+        // 4) Khoảng ngày
         LocalDate today = LocalDate.now();
         LocalDate from = parseOrDefault(req.getParameter("from"), today);
         LocalDate to   = parseOrDefault(req.getParameter("to"),   today);
-        if (to.isBefore(from)) { // hoán đổi nếu user nhập ngược
-            LocalDate t = from; from = to; to = t;
+        if (to.isBefore(from)) {
+            LocalDate tmp = from;
+            from = to;
+            to   = tmp;
         }
 
-        // 5) Lấy dữ liệu
-        //    Yêu cầu: StatsDAO tự catch SQLException và trả về đối tượng rỗng khi có lỗi.
+        // 5) Gọi DAO lấy dữ liệu
+        // LƯU Ý: Ở đây mình gọi 3 hàm. Bạn phải đảm bảo trong StatsDAO có đủ 3 hàm này
+        // và chúng JOIN được sang bảng Users để lọc theo department.
         var stats    = statsDAO.getDivisionStats(dept, from, to);
-        var pending  = statsDAO.getDivisionPendingRequests(dept);          // KHÔNG lọc theo ngày
-        var todayOff = statsDAO.getDivisionTodayOff(dept, today);          // Lọc đúng theo "hôm nay"
+        var pending  = statsDAO.getDivisionPendingRequests(dept);     // danh sách đơn PENDING
+        var todayOff = statsDAO.getDivisionTodayOff(dept, today);     // ai đang nghỉ hôm nay
 
-        // 6) CSRF cho form Approve/Reject
+        // 6) CSRF
         String csrf = Csrf.ensureToken(req.getSession());
 
-        // 7) Gán attribute cho JSP
+        // 7) Đẩy sang JSP
         req.setAttribute("csrf", csrf);
         req.setAttribute("dept", dept);
         req.setAttribute("canSwitchDept", isAdmin);
-        // Input date trong JSP đọc string/ISO ok, nên set toString()
         req.setAttribute("from", from.toString());
-        req.setAttribute("to",   to.toString());
+        req.setAttribute("to", to.toString());
         req.setAttribute("stats", stats);
         req.setAttribute("pending", pending);
         req.setAttribute("todayOff", todayOff);
 
-        // 8) No-store + audit
+        // 8) Không cache + audit
         resp.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         resp.setHeader("Pragma", "no-cache");
         resp.setDateHeader("Expires", 0);
@@ -91,7 +97,8 @@ public class DivDashboardServlet extends HttpServlet {
         } catch (Throwable ignore) {}
 
         // 9) Forward
-        req.getRequestDispatcher("/WEB-INF/views/admin/div_dashboard.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/admin/div_dashboard.jsp")
+           .forward(req, resp);
     }
 
     /* ===== Helpers ===== */

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>SUM PRIME</title></head>
+<body>
+  <h3>SUM PRIME</h3>
+
+  <div>Enter an integer a: <input id="txta" type="text"></div>
+  <div>Enter an integer b: <input id="txtb" type="text"></div>
+  <div>Result: <input id="txtOutput" type="text" readonly></div>
+  <button id="btnSum" type="button">SUM PRIME</button>
+
+  <div id="txtError"></div>
+
+  <h4>List of Executions:</h4>
+  <table border="1" cellpadding="4">
+    <thead><tr><th>a</th><th>b</th><th>Result</th></tr></thead>
+    <tbody id="tblBody"></tbody>
+  </table>
+
+<script>
+(function(){
+  const txta=document.getElementById('txta');
+  const txtb=document.getElementById('txtb');
+  const txtOutput=document.getElementById('txtOutput');
+  const btnSum=document.getElementById('btnSum');
+  const txtError=document.getElementById('txtError');
+  const tblBody=document.getElementById('tblBody');
+
+  function exists(a,b){
+    for(const tr of tblBody.querySelectorAll('tr')){
+      if(tr.children[0].textContent===String(a) &&
+         tr.children[1].textContent===String(b)) return true;
+    }
+    return false;
+  }
+  function isInt(x){ return /^-?\d+$/.test((x||'').trim()); }
+
+  btnSum.onclick = async () => {
+    txtError.textContent = '';
+    txtOutput.value = '';
+
+    const sa = txta.value, sb = txtb.value;
+    if(!isInt(sa) || !isInt(sb)){ txtError.textContent='Input must be integers'; return; }
+    const a = parseInt(sa,10), b = parseInt(sb,10);
+
+    // check “Execution existed!”
+    if (exists(a,b)) { txtError.textContent='Execution existed!'; return; }
+
+    try{
+      const body = new URLSearchParams({txta:String(a), txtb:String(b)}).toString();
+      // Dùng đường tương đối để tránh lỗi “Invalid URI”
+      const res = await fetch('my-exam', {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded'},
+        body
+      });
+      const text = await res.text();
+      if(!res.ok){ txtError.textContent = text || 'Error'; return; }
+
+      txtOutput.value = text;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${a}</td><td>${b}</td><td>${text}</td>`;
+      tblBody.appendChild(tr);
+    }catch(e){
+      txtError.textContent = 'Network error';
+    }
+  };
+})();
+</script>
+</body>
+</html>

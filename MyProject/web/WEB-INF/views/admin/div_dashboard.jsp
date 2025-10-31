@@ -66,18 +66,18 @@
     .sticky-head{position:sticky;top:0;background:linear-gradient(var(--bg),var(--bg));padding:8px 0;z-index:5}
     .empty{padding:24px;text-align:center;color:var(--muted)}
     .sr-only{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
-    /* Pagination + bulk bar */
+    /* bottom bar */
     .bar-bottom{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px}
     .bulk{display:flex;gap:8px;align-items:center}
     .hidden{display:none !important}
     /* Modal */
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
     .modal .dialog{max-width:520px;width:100%;background:var(--card);border:1px solid var(--bd);border-radius:14px;box-shadow:var(--shadow);padding:16px}
     .modal .dialog h3{margin:0 0 8px}
     .modal textarea{width:100%;min-height:110px;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--ink)}
     .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
     /* Toast */
-    .toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:999}
+    .toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:1000}
     .toast .t{background:var(--card);border:1px solid var(--bd);box-shadow:var(--shadow);border-left:5px solid var(--ok);padding:10px 12px;border-radius:10px}
     .toast .t.error{border-left-color:var(--no)}
     /* Skeleton */
@@ -86,6 +86,10 @@
   </style>
 </head>
 <body>
+
+<%@ include file="/WEB-INF/views/common/_admin_header.jsp" %>
+<%@ include file="/WEB-INF/views/common/_admin_sidebar.jsp" %>
+
 <div class="wrap">
   <div class="toolbar sticky-head">
     <div class="left">
@@ -270,25 +274,22 @@
 
   <!-- Modal xác nhận (dùng chung) -->
   <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
-    <div class="dialog">
+    <form id="mForm" class="dialog" method="post" action="${pageContext.request.contextPath}/request/approve">
       <h3 id="mTitle">Xác nhận</h3>
       <p id="mDesc" class="muted" style="margin-top:0">Bạn có chắc muốn thực hiện thao tác này?</p>
       <label for="mNote" class="muted">Ghi chú (không bắt buộc):</label>
-      <textarea id="mNote" placeholder="Lý do/ghi chú …"></textarea>
+      <textarea id="mNote" name="note" placeholder="Lý do/ghi chú …"></textarea>
+      <input type="hidden" name="_csrf" value="${csrf}">
+      <input type="hidden" name="action" id="mAction" value="">
+      <!-- single -->
+      <input type="hidden" name="id" id="mId" value="">
+      <!-- bulk -->
+      <div id="mIds"></div>
       <div class="actions">
-        <button id="mCancel" class="btn">Hủy</button>
-        <form id="mForm" method="post" action="${pageContext.request.contextPath}/request/approve">
-          <input type="hidden" name="_csrf" value="${csrf}">
-          <input type="hidden" name="action" id="mAction" value="">
-          <!-- single -->
-          <input type="hidden" name="id" id="mId" value="">
-          <!-- bulk -->
-          <div id="mIds"></div>
-          <input type="hidden" name="note" id="mNoteField" value="">
-          <button id="mOk" class="btn primary" type="submit">Xác nhận</button>
-        </form>
+        <button type="button" id="mCancel" class="btn">Hủy</button>
+        <button id="mOk" class="btn primary" type="submit">Xác nhận</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <!-- Toast -->
@@ -298,7 +299,6 @@
 
 <script>
 (function(){
-  // ===== Helpers =====
   const $ = s=>document.querySelector(s);
   const $$ = s=>Array.from(document.querySelectorAll(s));
   const toast = (msg, ok=true)=>{
@@ -309,23 +309,21 @@
     setTimeout(()=>t.remove(), 3200);
   };
 
-  // ===== Theme toggle (persist localStorage) =====
+  // Theme
   const themeBtn = $('#themeBtn');
   const keyTheme = 'lm.theme';
   const applyTheme = (v)=>document.documentElement.setAttribute('data-theme', v);
-  const saveTheme = (v)=>localStorage.setItem(keyTheme, v);
-  const initTheme = ()=>{
+  (function initTheme(){
     const v = localStorage.getItem(keyTheme) || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
     applyTheme(v);
-  };
-  initTheme();
+  })();
   themeBtn.addEventListener('click', ()=>{
     const cur = document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light';
     const nxt = cur==='dark'?'light':'dark';
-    applyTheme(nxt); saveTheme(nxt);
+    applyTheme(nxt); localStorage.setItem(keyTheme, nxt);
   });
 
-  // ===== Quick search (client-side filter) =====
+  // search + filter
   const q = $('#q');
   function matches(tr, term){
     term = term.trim().toLowerCase();
@@ -336,7 +334,7 @@
     return name.includes(term) || type.includes(term) || reason.includes(term);
   }
 
-  // ===== Pagination (client-side) =====
+  // pagination
   const ppSel = $('#pp'), pageEl = $('#page'), pagesEl = $('#pages');
   const prevBtn = $('#prev'), nextBtn = $('#next');
   let curPage = 1, perPage = parseInt(ppSel.value,10)||10;
@@ -365,7 +363,7 @@
   prevBtn.addEventListener('click', ()=>{ if(curPage>1){curPage--; renderPage();} });
   nextBtn.addEventListener('click', ()=>{ curPage++; renderPage(); });
 
-  // ===== Bulk select =====
+  // bulk select
   const chkAll = $('#chkAll');
   const selCount = $('#selCount');
   const selHint = $('#selHint');
@@ -383,12 +381,20 @@
     updateBulk();
   }));
 
-  // ===== Modal (single/bulk) =====
-  const modal = $('#modal'), mTitle = $('#mTitle'), mDesc = $('#mDesc'), mNote = $('#mNote');
-  const mCancel = $('#mCancel'), mForm = $('#mForm'), mAction = $('#mAction'), mId = $('#mId'), mIds = $('#mIds'), mNoteField = $('#mNoteField');
+  // modal
+  const modal = $('#modal'),
+        mTitle = $('#mTitle'),
+        mDesc = $('#mDesc'),
+        mForm = $('#mForm'),
+        mAction = $('#mAction'),
+        mId = $('#mId'),
+        mIds = $('#mIds'),
+        mCancel = $('#mCancel'),
+        mNote = $('#mNote');
+
   function openModal(args){
-    var action = args.action;
-    var ids = args.ids;
+    const action = args.action;
+    const ids = args.ids;
     mAction.value = action;
     mIds.innerHTML = '';
     mId.value = '';
@@ -411,11 +417,11 @@
     mNote.focus();
   }
   function closeModal(){ modal.style.display='none'; }
-  mCancel.addEventListener('click', function(e){ e.preventDefault(); closeModal(); });
-  modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
-  mForm.addEventListener('submit', function(){ mNoteField.value = mNote.value || ''; });
 
-  // Single actions
+  mCancel.addEventListener('click', function(){ closeModal(); });
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
+
+  // single buttons
   $$('.act-single').forEach(function(btn){
     btn.addEventListener('click', function(){
       const id = btn.dataset.id;
@@ -423,7 +429,7 @@
     });
   });
 
-  // Bulk actions
+  // bulk buttons
   const bulkApproveBtn = $('#bulkApproveBtn'), bulkRejectBtn = $('#bulkRejectBtn');
   function getSelectedIds(){
     return $$('.rowChk:checked').map(c=> c.closest('tr').dataset.id);
@@ -439,7 +445,7 @@
     openModal({action:'reject', ids:ids});
   });
 
-  // ===== Export CSV (pending table — các hàng đang hiển thị) =====
+  // CSV
   const csvBtn = $('#csvBtn');
   csvBtn.addEventListener('click', function(){
     const rows = $$('#pendingBody > tr').filter(r=> r.style.display !== 'none');
@@ -473,7 +479,7 @@
     toast('Đã tải CSV');
   });
 
-  // ===== Keyboard shortcuts =====
+  // shortcuts
   document.addEventListener('keydown', function(e){
     if(e.key==='/'){ e.preventDefault(); q.focus(); }
     if(e.key==='t'){ e.preventDefault(); themeBtn.click(); }
@@ -483,10 +489,12 @@
     }
   });
 
-  // ===== Initial render =====
+  // init
   reFilter();
   updateBulk();
 })();
 </script>
+
+<%@ include file="/WEB-INF/views/common/_admin_footer.jsp" %>
 </body>
 </html>

@@ -59,7 +59,6 @@ public class Request implements Serializable {
         this.leaveTypeName = name;
     }
 
-    
     private int id;
 
     /**
@@ -139,20 +138,28 @@ public class Request implements Serializable {
         }
         return ChronoUnit.DAYS.between(s, e) + 1;
     }
-    
-    
+
     // Fields
-private String attachmentUrl;   // hoặc attachmentPath nếu bạn thích lưu path nội bộ
-private String attachmentPath;
+    private String attachmentUrl;   // hoặc attachmentPath nếu bạn thích lưu path nội bộ
+    private String attachmentPath;
 
 // --- Attachment (tạm thời, có thể chưa map DB) ---
-public String getAttachmentUrl()  { return null; }     // TODO: map thật sau
-public String getAttachmentPath() { return null; }     // TODO: map thật sau
-public String getAttachmentName() { return null; }     // TODO: map thật sau
+    public String getAttachmentUrl() {
+        return null;
+    }     // TODO: map thật sau
+
+    public String getAttachmentPath() {
+        return null;
+    }     // TODO: map thật sau
+
+    public String getAttachmentName() {
+        return null;
+    }     // TODO: map thật sau
 // Nếu JSP có dùng ${r.hasAttachment}, thêm luôn:
-public boolean isHasAttachment() {
-    return false; // TODO: khi map thật thì trả theo Url/Path/Name
-}
+
+    public boolean isHasAttachment() {
+        return false; // TODO: khi map thật thì trả theo Url/Path/Name
+    }
 
     /**
      * Copy constructor
@@ -395,7 +402,6 @@ public boolean isHasAttachment() {
         this.managerId = managerId;
     }
 
-   
     public void setAttachmentName(String v) {
         this.attachmentName = v;
     }
@@ -447,13 +453,13 @@ public boolean isHasAttachment() {
     }
 
     // --- Alias cho DAO cũ dùng setFrom()/setTo() ---
-public void setFrom(LocalDate fromDate) {
-    this.startDate = fromDate;
-}
+    public void setFrom(LocalDate fromDate) {
+        this.startDate = fromDate;
+    }
 
-public void setTo(LocalDate toDate) {
-    this.endDate = toDate;
-}
+    public void setTo(LocalDate toDate) {
+        this.endDate = toDate;
+    }
 
     // === Fields ===
     private Long approverId;           // dùng Long để cho phép null
@@ -461,9 +467,17 @@ public void setTo(LocalDate toDate) {
     private String requesterDepartment;
 
     // === Getters (EL/JSP cần các getter này) ===
-    public Long getApproverId() { return approverId; }
-    public Long getRequesterId() { return requesterId; }
-    public String getRequesterDepartment() { return requesterDepartment; }
+    public Long getApproverId() {
+        return approverId;
+    }
+
+    public Long getRequesterId() {
+        return requesterId;
+    }
+
+    public String getRequesterDepartment() {
+        return requesterDepartment;
+    }
 
     // === Setters — FIX lỗi UnsupportedOperationException ===
     public void setApproverId(Long approverId) {
@@ -474,6 +488,7 @@ public void setTo(LocalDate toDate) {
     public void setRequesterId(long requesterId) {
         this.requesterId = requesterId; // auto-box sang Long
     }
+
     // overload phòng khi nơi khác truyền vào Long (có thể null)
     public void setRequesterId(Long requesterId) {
         this.requesterId = requesterId;
@@ -485,23 +500,46 @@ public void setTo(LocalDate toDate) {
                 : requesterDepartment.trim();
     }
 
-
-
     // CÁI BẠN ĐANG THIẾU: setApprovedAt(...)
-    public void setApprovedAt(LocalDateTime approvedAt) { this.approvedAt = approvedAt; }
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
 
 // *** CÁI ĐANG THIẾU ***
-public LocalDateTime getCreatedAt() {  LocalDateTime createdAt = null;
-return createdAt; }
-public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getCreatedAt() {
+        LocalDateTime createdAt = null;
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
     // (tuỳ chọn) fluent style cho tiện khi map từ ResultSet
-    public Request withApproverId(Long v){ this.approverId = v; return this; }
-    public Request withRequesterId(Long v){ this.requesterId = v; return this; }
-    public Request withRequesterDepartment(String v){ this.requesterDepartment = (v==null?null:v.trim()); return this; }
+    public Request withApproverId(Long v) {
+        this.approverId = v;
+        return this;
+    }
+
+    public Request withRequesterId(Long v) {
+        this.requesterId = v;
+        return this;
+    }
+
+    public Request withRequesterDepartment(String v) {
+        this.requesterDepartment = (v == null ? null : v.trim());
+        return this;
+    }
+
+private Integer userId;
+
+public void setUserId(Integer id) {
+    this.userId = id;
+}
+
+  public Integer getUserId() {
+    return userId;
 }
 
 
-    
-
-
+}
