@@ -7,8 +7,8 @@
   <title>Danh sách đơn nghỉ phép</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light dark" />
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/list.css?v=20251027" />
-  <script defer src="${pageContext.request.contextPath}/assets/js/list.js?v=20251027"></script>
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/list.css" />
+  <script defer src="${pageContext.request.contextPath}/assets/js/list.js"></script>
 </head>
 <body>
 <%@ include file="/WEB-INF/views/common/_header.jsp" %>
