@@ -118,6 +118,18 @@
   <url-pattern>/admin/users/*</url-pattern>
 </servlet-mapping>
 
+<!-- Admin User Detail -->
+<servlet>
+    <servlet-name>AdminUserDetailServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserDetailServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>AdminUserDetailServlet</servlet-name>
+    <!-- dùng /admin/user/detail (singular) để không bị trùng với /admin/users/... -->
+    <url-pattern>/admin/user/detail</url-pattern>
+</servlet-mapping>
+
+
 <!-- (nếu có) Toggle & Reset PW cũng cần mapping -->
 <servlet>
   <servlet-name>AdminUserToggleServlet</servlet-name>
