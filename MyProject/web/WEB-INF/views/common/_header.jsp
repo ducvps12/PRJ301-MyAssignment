@@ -45,13 +45,7 @@
         Agenda
       </a>
 
-      <c:if test="${isAdmin or isLead}">
-        <a href="${cp}/request/approve"
-           class="navlink ${fn:startsWith(_uri, cp.concat('/request/approve')) ? 'active' : ''}"
-           aria-current="${fn:startsWith(_uri, cp.concat('/request/approve')) ? 'page' : ''}">
-          Approvals
-        </a>
-      </c:if>
+   
 
       <c:if test="${isDivLead}">
         <a href="${cp}/admin/div"

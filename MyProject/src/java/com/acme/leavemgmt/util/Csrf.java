@@ -15,6 +15,15 @@ import java.util.Base64;
  * - Nên gọi rotate() khi login/logout để thay token.
  */
 public final class Csrf {
+
+    /**
+     * Hàm public cho servlet gọi.
+     * Dùng chung logic với valid(...)
+     */
+    public static boolean verifyToken(HttpServletRequest req) {
+        return valid(req);
+    }
+
     private Csrf() {}
 
     public static final String ATTR   = "csrf";

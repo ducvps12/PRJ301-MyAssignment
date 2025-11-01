@@ -9,61 +9,94 @@ import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.sql.SQLException;
 
-/**
- * /activity  -> xem lịch sử của chính mình
- * /admin/activity?userId=...  -> admin xem tất cả / lọc theo user
- */
-@WebServlet(name="ActivityServlet", urlPatterns = {"/activity", "/admin/activity"})
+@WebServlet(name = "ActivityServlet", urlPatterns = {"/activity", "/admin/activity"})
 public class ActivityServlet extends HttpServlet {
-  private final ActivityDAO dao = new ActivityDAO();
 
-  @Override protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-      throws ServletException, IOException {
+    private final ActivityDAO dao = new ActivityDAO();
 
-    User me = (User) req.getSession().getAttribute("user");
-    String path = req.getServletPath();
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
 
-    // /activity: bắt buộc đăng nhập
-    if ("/activity".equals(path)) {
-      if (me == null) { resp.sendRedirect(req.getContextPath()+"/login"); return; }
-      handleUser(me.getId(), req, resp);
-      return;
+        HttpSession session = req.getSession(false);
+        // ✅ đúng tên attribute
+        User me = session == null ? null : (User) session.getAttribute("currentUser");
+        String path = req.getServletPath();
+
+        // ========== /activity : user tự xem lịch sử ==========
+        if ("/activity".equals(path)) {
+            if (me == null) {
+                resp.sendRedirect(req.getContextPath() + "/login");
+                return;
+            }
+            handleUser(me.getId(), req, resp);
+            return;
+        }
+
+        // ========== /admin/activity : chỉ admin ==========
+        if (me == null || !"ADMIN".equalsIgnoreCase(me.getRole())) {
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+
+        Integer userId = null;
+        String uid = req.getParameter("userId");
+        if (uid != null && !uid.isBlank()) {
+            try {
+                userId = Integer.valueOf(uid);
+            } catch (NumberFormatException ignored) {}
+        }
+
+        handleAdmin(userId, req, resp);
     }
 
-    // /admin/activity: bắt buộc ADMIN
-    if (me == null || !"ADMIN".equals(me.getRole())) { resp.sendError(403); return; }
+    // ================== USER ==================
+    private void handleUser(int userId, HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
 
-    Integer userId = null;
-    String uid = req.getParameter("userId");
-    if (uid != null && !uid.isBlank()) try { userId = Integer.valueOf(uid); } catch (Exception ignore){}
+        // ❗ không được parse thẳng
+        int page = safeInt(req.getParameter("page"), 1);
+        int size = safeInt(req.getParameter("size"), 20);
 
-    handleAdmin(userId, req, resp);
-  }
+        try {
+            var pg = dao.pageByUser(userId, page, size);
+            req.setAttribute("pg", pg);
+            req.setAttribute("scope", "me");
+            req.getRequestDispatcher("/WEB-INF/views/activity.jsp")
+                    .forward(req, resp);
+        } catch (SQLException e) {
+            throw new ServletException(e);
+        }
+    }
 
-  private void handleUser(Integer userId, HttpServletRequest req, HttpServletResponse resp)
-      throws ServletException, IOException {
-    int page = parseInt(req.getParameter("page"), 1);
-    int size = parseInt(req.getParameter("size"), 20);
-    try {
-      var pg = dao.pageByUser(userId, page, size);
-      req.setAttribute("pg", pg);
-      req.setAttribute("scope", "me");
-      req.getRequestDispatcher("/WEB-INF/views/activity.jsp").forward(req, resp);
-    } catch (SQLException e) { throw new ServletException(e); }
-  }
+    // ================== ADMIN ==================
+    private void handleAdmin(Integer userId, HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
 
-  private void handleAdmin(Integer userId, HttpServletRequest req, HttpServletResponse resp)
-      throws ServletException, IOException {
-    int page = parseInt(req.getParameter("page"), 1);
-    int size = parseInt(req.getParameter("size"), 20);
-    try {
-      var pg = dao.pageByUser(userId, page, size);
-      req.setAttribute("pg", pg);
-      req.setAttribute("scope", "admin");
-      req.setAttribute("userFilter", userId);
-      req.getRequestDispatcher("/WEB-INF/views/activity.jsp").forward(req, resp);
-    } catch (SQLException e) { throw new ServletException(e); }
-  }
+        int page = safeInt(req.getParameter("page"), 1);
+        int size = safeInt(req.getParameter("size"), 20);
 
-  private int parseInt(String s, int def){ try { return Integer.parseInt(s); } catch(Exception e){ return def; } }
+        try {
+            // dùng lại hàm DAO sẵn có
+            var pg = dao.pageByUser(userId, page, size);
+
+            req.setAttribute("pg", pg);
+            req.setAttribute("scope", "admin");
+            req.setAttribute("userFilter", userId);
+            req.getRequestDispatcher("/WEB-INF/views/activity.jsp")
+                    .forward(req, resp);
+        } catch (SQLException e) {
+            throw new ServletException(e);
+        }
+    }
+
+    // ================== helper ==================
+    private int safeInt(String s, int def) {
+        if (s == null || s.isBlank()) return def;
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
 }

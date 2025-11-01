@@ -22,6 +22,8 @@
   .pager{display:flex;gap:8px;justify-content:flex-end;padding:12px}
 </style>
 </head>
+  <jsp:include page="/WEB-INF/views/common/_header.jsp"/>
+
 <body>
 <div class="wrap">
   <h2>Lịch sử hoạt động</h2>
@@ -101,4 +103,6 @@
   </div>
 </div>
 </body>
+  <jsp:include page="/WEB-INF/views/common/_footer.jsp"/>
+
 </html>
