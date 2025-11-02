@@ -45,6 +45,12 @@ public class User implements Serializable {
     private Date createdAt;
     private Date updatedAt;
 
+    // ===== Login tracking =====
+    /** Lần đăng nhập gần nhất */
+    private Date lastLogin;
+    /** IP/thiết bị đăng nhập gần nhất */
+    private String lastIp;
+
     public User() {}
 
     public User(int id, String username, String fullName, String role, String department) {
@@ -136,6 +142,21 @@ public class User implements Serializable {
     public Date getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Date updatedAt) { this.updatedAt = updatedAt; }
 
+    // ===== Login tracking getters/setters =====
+    public Date getLastLogin() {
+        return lastLogin;
+    }
+    public void setLastLogin(Date lastLogin) {
+        this.lastLogin = lastLogin;
+    }
+
+    public String getLastIp() {
+        return lastIp;
+    }
+    public void setLastIp(String lastIp) {
+        this.lastIp = lastIp;
+    }
+
     // ===== Helpers for authorization =====
     public boolean hasRole(String r) {
         return getRoleCode().equalsIgnoreCase(r);
@@ -148,25 +169,29 @@ public class User implements Serializable {
 
     /** Leader: DIV_LEADER | TEAM_LEAD | QA_LEAD | (hậu tố *_LEAD/*_LEADER) */
     public boolean isLead() {
-    String rc = getRoleCode();
-    if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
-    return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
-        || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
-}
+        String rc = getRoleCode();
+        if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
+        return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
+                || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
+    }
 
-/** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
-public boolean isLeader() { return isLead(); }
+    /** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
+    public boolean isLeader() { return isLead(); }
 
-public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
+    public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
 
-public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }
-public boolean canAccessAdminUsers()     { return isAdmin(); }
-public boolean canApproveRequests()      { return isAdmin() || isLead(); }
-
+    public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }
+    public boolean canAccessAdminUsers()     { return isAdmin(); }
+    public boolean canApproveRequests()      { return isAdmin() || isLead(); }
 
     // ===== Display / Debug =====
     public String getDisplayName() {
         return (fullName != null && !fullName.isBlank()) ? fullName : username;
+    }
+
+    /** tiện cho JSP: nếu có lastLogin thì trả về true */
+    public boolean hasLastLogin() {
+        return lastLogin != null;
     }
 
     @Override
@@ -175,6 +200,7 @@ public boolean canApproveRequests()      { return isAdmin() || isLead(); }
         if (!(o instanceof User user)) return false;
         return id == user.id;
     }
+
     @Override
     public int hashCode() { return Objects.hash(id); }
 
@@ -187,6 +213,8 @@ public boolean canApproveRequests()      { return isAdmin() || isLead(); }
                 ", departmentId=" + departmentId +
                 ", department='" + department + '\'' +
                 ", status=" + status +
+                ", lastLogin=" + lastLogin +
+                ", lastIp='" + lastIp + '\'' +
                 '}';
     }
 
@@ -202,6 +230,7 @@ public boolean canApproveRequests()      { return isAdmin() || isLead(); }
             default: return null; // unknown
         }
     }
+
     /** Map role code (VARCHAR) -> roleId (INT). Điều chỉnh theo DB của bạn. */
     private static int mapRoleCodeToId(String code) {
         if (code == null) return 0;

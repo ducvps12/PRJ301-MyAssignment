@@ -7,30 +7,65 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * CSRF helper – Session token + form/header verification.
+ * CSRF helper – session token + form/header verification.
  *
  * - Lưu token trong session (attr: "csrf").
- * - Client gửi lại qua input name "_csrf" hoặc header "X-CSRF-Token".
- * - Bỏ qua kiểm tra với GET/HEAD/OPTIONS.
- * - Nên gọi rotate() khi login/logout để thay token.
+ * - Client gửi lại qua input name "_csrf" hoặc header "X-CSRF-Token" (cũng chấp nhận "csrf_token").
+ * - GET/HEAD/OPTIONS -> bỏ qua.
  */
 public final class Csrf {
 
+    public static boolean isTokenValid(HttpServletRequest req) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
+    public static void addToken(HttpServletRequest req) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
+    private Csrf() {}
+
+    // tên attr / param / header chuẩn
+    public static final String ATTR   = "csrf";
+    public static final String PARAM  = "_csrf";          // tên input mặc định
+    public static final String ALT_PARAM = "csrf_token";  // tên input mà nhiều form đang dùng
+    public static final String HEADER = "X-CSRF-Token";
+
+    private static final SecureRandom RNG = new SecureRandom();
+
+    /* =======================================================================
+       API public để servlet gọi
+       ======================================================================= */
+
     /**
-     * Hàm public cho servlet gọi.
-     * Dùng chung logic với valid(...)
+     * Gọi ở doGet: đảm bảo có token trong session và đẩy xuống request để JSP lấy render.
+     * JSP có thể dùng: ${csrf_token} hoặc ${_csrf}
+     */
+    public static void protect(HttpServletRequest req) {
+        HttpSession ses = req.getSession();
+        String token = ensureToken(ses);
+        // đặt cả 2 tên để form nào cũng xài được
+        req.setAttribute("csrf_token", token);
+        req.setAttribute("_csrf", token);
+    }
+
+    /**
+     * Gọi ở doPost: kiểm tra token gửi lên.
+     */
+    public static boolean verify(HttpServletRequest req) {
+        return valid(req);
+    }
+
+    /**
+     * Bạn đã viết verifyToken(...) rồi, cứ để để tương thích.
      */
     public static boolean verifyToken(HttpServletRequest req) {
         return valid(req);
     }
 
-    private Csrf() {}
-
-    public static final String ATTR   = "csrf";
-    public static final String PARAM  = "_csrf";
-    public static final String HEADER = "X-CSRF-Token";
-
-    private static final SecureRandom RNG = new SecureRandom();
+    /* =======================================================================
+       Core logic
+       ======================================================================= */
 
     /** Tạo token mới (32 bytes -> ~43 ký tự Base64 URL-safe, không padding). */
     private static String newToken() {
@@ -63,7 +98,8 @@ public final class Csrf {
     /**
      * Kiểm tra CSRF cho request.
      * - Với GET/HEAD/OPTIONS: luôn true.
-     * - Với các method khác: so sánh token session với form param "_csrf" hoặc header "X-CSRF-Token".
+     * - Với method khác: so sánh token session với form param "_csrf" hoặc "csrf_token"
+     *   hoặc header "X-CSRF-Token".
      */
     public static boolean valid(HttpServletRequest req) {
         String m = req.getMethod();
@@ -74,8 +110,9 @@ public final class Csrf {
         if (expected == null || expected.isEmpty()) return false;
 
         String provided = firstNonEmpty(
-                req.getParameter(PARAM),
-                req.getHeader(HEADER)
+                req.getParameter(PARAM),          // _csrf
+                req.getParameter(ALT_PARAM),      // csrf_token
+                req.getHeader(HEADER)             // X-CSRF-Token
         );
         if (provided == null) return false;
 
@@ -83,15 +120,18 @@ public final class Csrf {
     }
 
     /* ===== helpers ===== */
+
     private static boolean isSafeMethod(String m) {
         return "GET".equalsIgnoreCase(m)
-            || "HEAD".equalsIgnoreCase(m)
-            || "OPTIONS".equalsIgnoreCase(m);
+                || "HEAD".equalsIgnoreCase(m)
+                || "OPTIONS".equalsIgnoreCase(m);
     }
 
-    private static String firstNonEmpty(String a, String b) {
-        if (a != null && !a.isEmpty()) return a;
-        if (b != null && !b.isEmpty()) return b;
+    private static String firstNonEmpty(String... arr) {
+        if (arr == null) return null;
+        for (String s : arr) {
+            if (s != null && !s.isEmpty()) return s;
+        }
         return null;
     }
 
@@ -101,8 +141,8 @@ public final class Csrf {
         int len = Math.max(a.length(), b.length());
         int diff = a.length() ^ b.length();
         for (int i = 0; i < len; i++) {
-            char ca = i < a.length() ? a.charAt(i) : 0;
-            char cb = i < b.length() ? b.charAt(i) : 0;
+            char ca = (i < a.length()) ? a.charAt(i) : 0;
+            char cb = (i < b.length()) ? b.charAt(i) : 0;
             diff |= (ca ^ cb);
         }
         return diff == 0;

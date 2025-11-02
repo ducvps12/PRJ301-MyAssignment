@@ -94,6 +94,37 @@
   <url-pattern>/admin/*</url-pattern>
 </servlet-mapping>
 
+<!-- ✅ Admin: USER DETAIL -->
+<servlet>
+    <servlet-name>AdminUserDetailServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserDetailServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>AdminUserDetailServlet</servlet-name>
+    <url-pattern>/admin/users/detail</url-pattern>
+</servlet-mapping>
+
+
+<!-- ✅ Admin: USER DETAIL -->
+<servlet>
+    <servlet-name>AdminUserEditServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserEditServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>AdminUserEditServlet</servlet-name>
+    <url-pattern>/admin/users/edit</url-pattern>
+</servlet-mapping>
+
+<!-- ✅ Admin: rs -->
+<servlet>
+    <servlet-name>AdminUserResetPwServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserResetPwServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>AdminUserResetPwServlet</servlet-name>
+    <url-pattern>/admin/users/rs</url-pattern>
+</servlet-mapping>
+
 
 
   <servlet>
@@ -106,17 +137,26 @@
   </servlet-mapping>
 
 <!-- Admin Users List -->
+<!-- LIST -->
 <servlet>
-  <servlet-name>AdminUsersServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
-  <load-on-startup>3</load-on-startup>
+    <servlet-name>AdminUsersServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
 </servlet>
 <servlet-mapping>
-  <servlet-name>AdminUsersServlet</servlet-name>
-  <!-- map cả exact và prefix để chắc chắn -->
-  <url-pattern>/admin/users</url-pattern>
-  <url-pattern>/admin/users/*</url-pattern>
+    <servlet-name>AdminUsersServlet</servlet-name>
+    <url-pattern>/admin/users</url-pattern>
 </servlet-mapping>
+
+<!-- CREATE -->
+<servlet>
+    <servlet-name>AdminUserCreateServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserCreateServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>AdminUserCreateServlet</servlet-name>
+    <url-pattern>/admin/users/create</url-pattern>
+</servlet-mapping>
+
 
 <!-- Admin User Detail -->
 <servlet>

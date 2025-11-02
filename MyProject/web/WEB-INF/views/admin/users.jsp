@@ -5,6 +5,24 @@
 <%@ include file="/WEB-INF/views/common/_admin_sidebar.jsp" %>
 <c:set var="cp" value="${pageContext.request.contextPath}" />
 
+<!-- Flash Messages -->
+<c:if test="${not empty sessionScope.flash_success}">
+  <div class="flash flash-success" role="alert">
+    <span class="flash-icon">✓</span>
+    <span class="flash-msg">${sessionScope.flash_success}</span>
+    <button class="flash-close" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+  </div>
+  <c:remove var="flash_success" scope="session" />
+</c:if>
+<c:if test="${not empty sessionScope.flash_error}">
+  <div class="flash flash-error" role="alert">
+    <span class="flash-icon">⚠</span>
+    <span class="flash-msg">${sessionScope.flash_error}</span>
+    <button class="flash-close" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+  </div>
+  <c:remove var="flash_error" scope="session" />
+</c:if>
+
 <div class="container users-page">
   <!-- Page Header / Toolbar -->
   <div class="page-head">
@@ -332,6 +350,16 @@ td[data-key="department"]{ max-width: 220px }
 
 /* Toast */
 .toast{position:fixed;right:16px;bottom:16px;max-width:360px;background:var(--card);border:1px solid var(--bd);padding:10px 12px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s}
+
+/* Flash Messages */
+.flash{position:fixed;top:16px;right:16px;max-width:480px;padding:14px 16px;border-radius:12px;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px;z-index:1000;animation:slideInRight .3s ease-out}
+.flash-success{background:linear-gradient(135deg,rgba(34,197,94,.95),rgba(22,163,74,.95));border:1px solid rgba(34,197,94,.5);color:#fff}
+.flash-error{background:linear-gradient(135deg,rgba(239,68,68,.95),rgba(220,38,38,.95));border:1px solid rgba(239,68,68,.5);color:#fff}
+.flash-icon{font-size:18px;font-weight:700;flex-shrink:0}
+.flash-msg{flex:1;font-size:14px;line-height:1.4}
+.flash-close{background:transparent;border:0;color:inherit;font-size:20px;line-height:1;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;opacity:.8;flex-shrink:0}
+.flash-close:hover{opacity:1}
+@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* Confirm dialog */
 .confirm{border:0;border-radius:14px;padding:0;background:transparent}
