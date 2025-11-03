@@ -168,4 +168,15 @@ public class UserDAO {
             if (!rs.wasNull()) setter.set(v);
         } catch (SQLException ignore) { /* cột không tồn tại */ }
     }
+
+public User findByEmail(String email) throws SQLException { /* SELECT * FROM Users WHERE email=? */
+        return null;
+    }
+
+public void createFromOAuth(User u) throws SQLException {
+  // INSERT INTO Users(email, full_name, avatar_url, status, role, created_at, auth_provider)
+}
+
+
+
 }

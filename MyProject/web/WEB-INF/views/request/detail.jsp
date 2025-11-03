@@ -6,7 +6,7 @@
   <meta charset="UTF-8">
   <title>Chi tiết yêu cầu #${r.id}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-<%@ include file="/WEB-INF/views/common/_header.jsp" %>
+  <%@ include file="/WEB-INF/views/common/_header.jsp" %>
 
   <style>
     :root{
@@ -25,6 +25,7 @@
     .title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .id {font-weight:600}
     .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid var(--b);}
+    .status-PENDING{background:#fffbeb;border-color:var(--warn);color:#92400e}
     .status-APPROVED{background:#ecfdf5;border-color:var(--ok);color:#065f46}
     .status-REJECTED{background:#fef2f2;border-color:var(--no);color:#991b1b}
     .status-INPROGRESS{background:#eff6ff;border-color:var(--info);color:#1e40af}
@@ -69,7 +70,6 @@
     .modal .row{margin-top:10px}
     textarea{width:100%;min-height:110px;border:1px solid var(--b);border-radius:12px;padding:10px;font:inherit}
 
-    /* Print */
     @media print{
       .topbar,.actions,.btn,.toast,dialog{display:none !important}
       .card{box-shadow:none;border:none}
@@ -104,6 +104,7 @@
       <h2 style="margin:0">Chi tiết yêu cầu <span class="id mono">#${r.id}</span></h2>
       <span class="badge status-${r.status}">
         <c:choose>
+          <c:when test="${r.status eq 'PENDING'}">⏳ PENDING</c:when>
           <c:when test="${r.status eq 'INPROGRESS'}">⏳ Đang xử lý</c:when>
           <c:when test="${r.status eq 'APPROVED'}">✅ Đã duyệt</c:when>
           <c:when test="${r.status eq 'REJECTED'}">❌ Từ chối</c:when>
@@ -115,7 +116,7 @@
       </c:if>
     </div>
 
-    <div class="muted" style="margin-top:6px">Người tạo: <c:out value='${r.createdByName}'/></div>
+    <div class="muted" style="margin-top:6px">Người tạo: <c:out value='${r.createdByName}' default="(không rõ)"/></div>
 
     <div class="grid" style="margin-top:12px">
       <div class="kv">
@@ -169,40 +170,40 @@
         </div>
       </c:if>
 
-    <c:if test="${not empty r.attachmentUrl or not empty r.attachmentPath or not empty r.attachmentName}">
-  <div style="grid-column:1/-1" class="kv">
-    <b>Tệp đính kèm:</b>
-    <div>
-      📎 <c:out value='${empty r.attachmentName ? "file" : r.attachmentName}'/>
-      <c:choose>
-        <c:when test="${not empty r.attachmentUrl}">
-          <a class="btn" style="padding:4px 8px;margin-left:8px"
-             href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
-        </c:when>
-        <c:when test="${not empty r.attachmentPath}">
-          <a class="btn" style="padding:4px 8px;margin-left:8px"
-             href="${pageContext.request.contextPath}/files/${r.attachmentPath}">Tải xuống</a>
-        </c:when>
-      </c:choose>
-    </div>
-  </div>
-</c:if>
-
+      <c:if test="${not empty r.attachmentUrl or not empty r.attachmentPath or not empty r.attachmentName}">
+        <div style="grid-column:1/-1" class="kv">
+          <b>Tệp đính kèm:</b>
+          <div>
+            📎 <c:out value='${empty r.attachmentName ? "file" : r.attachmentName}'/>
+            <c:choose>
+              <c:when test="${not empty r.attachmentUrl}">
+                <a class="btn" style="padding:4px 8px;margin-left:8px"
+                   href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
+              </c:when>
+              <c:when test="${not empty r.attachmentPath}">
+                <a class="btn" style="padding:4px 8px;margin-left:8px"
+                   href="${pageContext.request.contextPath}/files/${r.attachmentPath}">Tải xuống</a>
+              </c:when>
+            </c:choose>
+          </div>
+        </div>
+      </c:if>
     </div>
 
     <!-- Hành động -->
     <div class="actions">
       <a class="btn" href="${pageContext.request.contextPath}/request/list">← Quay lại danh sách</a>
 
+      <!-- Lưu ý: tùy hệ thống session, có thể là currentUser; điều chỉnh nếu cần -->
       <c:if test="${not empty sessionScope.user
                    and sessionScope.user.roleCode eq 'MANAGER'
-                   and r.status eq 'INPROGRESS'}">
+                   and r.status eq 'PENDING'}">
         <a class="btn btn-primary" href="${pageContext.request.contextPath}/request/approve?id=${r.id}">Duyệt / Từ chối</a>
       </c:if>
 
       <c:if test="${not empty sessionScope.user
                    and sessionScope.user.userId == r.createdBy
-                   and r.status eq 'INPROGRESS'}">
+                   and r.status eq 'PENDING'}">
         <button class="btn btn-danger" id="openCancel">Hủy yêu cầu</button>
       </c:if>
     </div>
@@ -211,24 +212,38 @@
   <!-- LỊCH SỬ -->
   <div class="card" id="history">
     <h3 style="margin-top:0">Lịch sử xử lý</h3>
-    <ul class="timeline">
-      <c:forEach var="h" items="${r.history}">
-        <li>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="tag"><c:out value='${h.action}'/></span>
-            <span class="muted">
-              <fmt:formatDate value="${h.actedAt}" pattern="dd/MM/yyyy HH:mm"/> • <c:out value='${h.actedByName}'/>
-            </span>
-          </div>
-          <c:if test="${not empty h.note}">
-            <div class="note"><c:out value='${h.note}'/></div>
-          </c:if>
-        </li>
-      </c:forEach>
-      <c:if test="${empty r.history}">
-        <li><span class="muted">Chưa có lịch sử.</span></li>
-      </c:if>
-    </ul>
+
+    <c:catch var="histErr">
+      <ul class="timeline">
+        <c:forEach var="h" items="${r.history}">
+          <li>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="tag"><c:out value='${h.action}'/></span>
+              <span class="muted">
+                <c:choose>
+                  <c:when test="${not empty h.actedAtDate}">
+                    <fmt:formatDate value="${h.actedAtDate}" pattern="dd/MM/yyyy HH:mm"/>
+                  </c:when>
+                  <c:otherwise>-</c:otherwise>
+                </c:choose>
+                 • <c:out value='${h.actedByName}' default="(unknown)"/>
+              </span>
+            </div>
+            <c:if test="${not empty h.note}">
+              <div class="note"><c:out value='${h.note}'/></div>
+            </c:if>
+          </li>
+        </c:forEach>
+        <c:if test="${empty r.history}">
+          <li><span class="muted">Chưa có lịch sử.</span></li>
+        </c:if>
+      </ul>
+    </c:catch>
+
+    <!-- Ẩn nội dung lỗi để không phá bố cục nhưng vẫn cho phép bạn inspect -->
+    <c:if test="${not empty histErr}">
+      <div style="display:none" data-history-error="${histErr}"></div>
+    </c:if>
   </div>
 </div>
 
@@ -237,7 +252,7 @@
   <form method="post" action="${pageContext.request.contextPath}/request/cancel" class="modal">
     <h3 style="margin:0">Xác nhận hủy yêu cầu #${r.id}</h3>
     <input type="hidden" name="id" value="${r.id}">
-    <div class="row muted">Bạn chỉ có thể hủy khi trạng thái còn <b>INPROGRESS</b>.</div>
+    <div class="row muted">Bạn chỉ có thể hủy khi trạng thái còn <b>PENDING</b>.</div>
     <div class="row">
       <label for="note"><b>Lý do hủy (tuỳ chọn)</b></label>
       <textarea name="note" id="note" placeholder="Ví dụ: Đổi kế hoạch cá nhân..."></textarea>
@@ -252,7 +267,6 @@
 <div class="toast" id="toast">Đã sao chép liên kết!</div>
 
 <script>
-  // Toast helper
   const toast = msg => {
     const el = document.getElementById('toast');
     el.textContent = msg || 'Thao tác thành công!';
@@ -260,7 +274,6 @@
     setTimeout(()=>el.classList.remove('show'), 1800);
   };
 
-  // Copy link
   document.getElementById('copyLinkBtn')?.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(location.href);
@@ -268,10 +281,8 @@
     } catch(e){ toast('Không thể sao chép.'); }
   });
 
-  // Print
   document.getElementById('printBtn')?.addEventListener('click', () => window.print());
 
-  // Keyboard shortcuts: B(back), P(print), H(history)
   window.addEventListener('keydown', (e)=>{
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
     if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); window.print(); }
@@ -279,18 +290,15 @@
     if (e.key === 'h' || e.key === 'H'){ document.getElementById('history')?.scrollIntoView({behavior:'smooth'}); }
   });
 
-  // Cancel dialog
   const dlg = document.getElementById('cancelDlg');
   document.getElementById('openCancel')?.addEventListener('click', ()=> dlg.showModal());
   document.getElementById('closeCancel')?.addEventListener('click', ()=> dlg.close());
 
-  // Show toast if ?msg=...
   const url = new URL(location.href);
   const msg = url.searchParams.get('msg');
   if (msg) setTimeout(()=>toast(msg), 100);
 </script>
 
 <%@ include file="/WEB-INF/views/common/_footer.jsp" %>
-
 </body>
 </html>

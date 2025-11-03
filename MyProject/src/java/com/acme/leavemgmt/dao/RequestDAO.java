@@ -180,26 +180,24 @@ public class RequestDAO {
         }
         return 1; // fallback Admin (đổi nếu admin của bạn không phải id=1)
     }
-
-  public int createRequest(Request r) throws SQLException {
-    // V2: schema mới: employee_id / approver_id / from_date / to_date
-    final String sqlV2 = """
+public int createRequest(Request r) throws SQLException {
+    // --- helpers ---
+    final String INS_V2_ID = """
         INSERT INTO dbo.Requests
             (employee_id, approver_id, from_date, to_date, reason, status)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, N'PENDING')
     """;
+    final String INS_V2_REQID = INS_V2_ID.replace("OUTPUT INSERTED.id", "OUTPUT INSERTED.request_id");
 
-    // V1: schema kiểu “user_id, type, status, reason, start_date, end_date...”
-    final String sqlV1 = """
+    final String INS_V1 = """
         INSERT INTO dbo.Requests
             (user_id, type, status, reason, start_date, end_date, created_at)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME())
     """;
 
-    // V0: schema cũ hơn: created_by / processed_by / start_date / end_date / reason
-    final String sqlV0 = """
+    final String INS_V0 = """
         INSERT INTO dbo.Requests
             (created_by, processed_by, start_date, end_date, reason, status)
         OUTPUT INSERTED.id
@@ -210,96 +208,94 @@ public class RequestDAO {
         cn.setAutoCommit(false);
         Integer newId = null;
 
-        // ================== THỬ V2 TRƯỚC ==================
-        try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
-            // employee_id = người tạo đơn
-            ps.setInt(1, r.getCreatedBy());
-
-            // approver_id (có thể null)
-            if (r.getProcessedBy() == null) {
-                ps.setNull(2, Types.INTEGER);
-            } else {
-                ps.setInt(2, r.getProcessedBy());
+        // ======= V2: employee/approver/from/to =======
+        try {
+            newId = insertV2(cn, INS_V2_ID, r);            // OUTPUT INSERTED.id
+        } catch (SQLException tryReqId) {
+            // Nếu cột identity tên 'request_id' thay vì 'id'
+            try {
+                newId = insertV2(cn, INS_V2_REQID, r);     // OUTPUT INSERTED.request_id
+            } catch (SQLException ignoreV2) {
+                newId = null; // rơi xuống V1
             }
-
-            // from_date / to_date
-            ps.setDate(3, r.getStartDate() != null ? Date.valueOf(r.getStartDate()) : null);
-            ps.setDate(4, r.getEndDate()   != null ? Date.valueOf(r.getEndDate())   : null);
-
-            // reason
-            ps.setString(5, r.getReason());
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    newId = rs.getInt(1);
-                }
-            }
-        } catch (SQLException ignoreV2) {
-            // nếu V2 lỗi thì để newId vẫn = null rồi rớt xuống V1
         }
 
-        // ================== THỬ V1 NẾU V2 THẤT BẠI ==================
+        // ======= V1: user_id/type/status/reason/start/end =======
         if (newId == null) {
-            try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
-                final String defaultType = (r.getType() != null && !r.getType().isBlank())
-                        ? r.getType()
-                        : "ANNUAL";                 // bạn đổi sang loại bạn dùng
-                final String defaultStatus = "PENDING";
-
-                ps.setInt(1, r.getCreatedBy());       // user_id
-                ps.setString(2, defaultType);         // type
-                ps.setString(3, defaultStatus);       // status
-                ps.setString(4, r.getReason());       // reason
-                ps.setDate(5, r.getStartDate() != null ? Date.valueOf(r.getStartDate()) : null);
-                ps.setDate(6, r.getEndDate()   != null ? Date.valueOf(r.getEndDate())   : null);
+            try (PreparedStatement ps = cn.prepareStatement(INS_V1)) {
+                final String type = (r.getType() != null && !r.getType().isBlank()) ? r.getType() : "ANNUAL";
+                ps.setInt(1, orCreatedBy(r));                // user_id
+                ps.setString(2, type);                       // type
+                ps.setString(3, "PENDING");                  // status
+                ps.setString(4, r.getReason());              // reason
+                setLocalDateOrNull(ps, 5, r.getStartDate()); // start_date
+                setLocalDateOrNull(ps, 6, r.getEndDate());   // end_date
 
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        newId = rs.getInt(1);
-                    }
+                    if (rs.next()) newId = rs.getInt(1);
                 }
             } catch (SQLException ignoreV1) {
-                // rớt tiếp xuống V0
+                newId = null; // rơi xuống V0
             }
         }
 
-        // ================== THỬ V0 NẾU V1 CŨNG THẤT BẠI ==================
+        // ======= V0: created_by/processed_by/start/end/reason/status =======
         if (newId == null) {
-            try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
-                ps.setInt(1, r.getCreatedBy());   // created_by
-
-                if (r.getProcessedBy() == null) {
-                    ps.setNull(2, Types.INTEGER);
-                } else {
-                    ps.setInt(2, r.getProcessedBy());   // processed_by
-                }
-
-                ps.setDate(3, r.getStartDate() != null ? Date.valueOf(r.getStartDate()) : null);
-                ps.setDate(4, r.getEndDate()   != null ? Date.valueOf(r.getEndDate())   : null);
-                ps.setString(5, r.getReason());   // reason
+            try (PreparedStatement ps = cn.prepareStatement(INS_V0)) {
+                ps.setInt(1, orCreatedBy(r));                // created_by
+                setIntOrNull(ps, 2, r.getProcessedBy());     // processed_by
+                setLocalDateOrNull(ps, 3, r.getStartDate()); // start_date
+                setLocalDateOrNull(ps, 4, r.getEndDate());   // end_date
+                ps.setString(5, r.getReason());              // reason
 
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        newId = rs.getInt(1);
-                    }
+                    if (rs.next()) newId = rs.getInt(1);
                 }
             }
         }
 
-        // ================== KIỂM TRA KẾT QUẢ ==================
         if (newId == null) {
             cn.rollback();
             throw new SQLException("Không tạo được request mới (không xác định schema).");
         }
 
-        // ================== GHI LỊCH SỬ GIỐNG HÀM ĐẦU CỦA BẠN ==================
-        // nếu Request của bạn có field "createdByName" thì xài:
-        String creatorName =
-                (r.getCreatedByName() != null ? r.getCreatedByName() : "SYSTEM");
-        insertHistory(cn, newId, r.getCreatedBy(), creatorName, "CREATED", null);
+        // ======= History: CREATED =======
+        String creatorName = (r.getCreatedByName() != null ? r.getCreatedByName() : "SYSTEM");
+        insertHistory(cn, newId, orCreatedBy(r), creatorName, "CREATED", null);
 
         cn.commit();
         return newId;
+    }
+}
+
+/* ---------------- helpers ---------------- */
+
+private static Integer orCreatedBy(Request r) {
+    // bảo đảm có id người tạo; nếu userId null thì lấy createdBy
+    return (r.getUserId() != null) ? r.getUserId() : r.getCreatedBy();
+}
+
+private static void setLocalDateOrNull(PreparedStatement ps, int idx, java.time.LocalDate d) throws SQLException {
+    if (d == null) ps.setNull(idx, java.sql.Types.DATE);
+    else ps.setDate(idx, java.sql.Date.valueOf(d));
+}
+
+private static void setIntOrNull(PreparedStatement ps, int idx, Integer v) throws SQLException {
+    if (v == null) ps.setNull(idx, java.sql.Types.INTEGER);
+    else ps.setInt(idx, v);
+}
+
+private static Integer insertV2(Connection cn, String sql, Request r) throws SQLException {
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setInt(1, orCreatedBy(r));               // employee_id
+        setIntOrNull(ps, 2, r.getProcessedBy());    // approver_id
+        setLocalDateOrNull(ps, 3, r.getStartDate());// from_date
+        setLocalDateOrNull(ps, 4, r.getEndDate());  // to_date
+        ps.setString(5, r.getReason());             // reason
+        try (ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) return rs.getInt(1);
+        }
+        return null;
     }
 }
 
@@ -748,52 +744,77 @@ public class RequestDAO {
      * Ghi manager_note (lý do hủy) và người xử lý = chính người hủy.
      */
     public boolean cancelRequest(int requestId, int userId, String userName, String note) throws SQLException {
-        final String sql = """
-          UPDATE Requests
-          SET status = 'CANCELLED',
-              processed_by = ?, 
-              manager_note = ?
-          WHERE id = ? AND created_by = ? AND status = 'INPROGRESS'
-        """;
-        // Fallback cho schema V2 (tên cột khác)
-        final String sqlV2 = """
-          UPDATE Requests
-          SET status = 'CANCELLED',
-              approver_id = ?, 
-              manager_note = ?
-          WHERE request_id = ? AND employee_id = ? AND status = 'INPROGRESS'
+    final String sqlV1 = """
+        UPDATE dbo.Requests
+        SET status = 'CANCELLED',
+            processed_by = ?,                               -- nếu không có cột này thì sẽ rơi sang V2
+            manager_note = CASE
+                WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
+                WHEN manager_note IS NULL OR manager_note = '' THEN CONCAT('[User cancel] ', ?)
+                ELSE CONCAT(manager_note, CHAR(10), '[User cancel] ', ?)
+            END,
+            cancelled_at = SYSDATETIME()                    -- nếu có cột, OK; nếu không có thì vẫn chạy được
+        WHERE id = ?
+          AND (user_id = ? OR created_by = ?)               -- chấp nhận cả hai
+          AND UPPER(status) IN ('PENDING','INPROGRESS')
         """;
 
-        try (Connection cn = DBConnection.getConnection()) {
-            cn.setAutoCommit(false);
-            int rows;
-            // thử cho V0/V1 trước
-            try (PreparedStatement ps = cn.prepareStatement(sql)) {
-                ps.setInt(1, userId);
-                ps.setString(2, note);
-                ps.setInt(3, requestId);
-                ps.setInt(4, userId);
-                rows = ps.executeUpdate();
-            } catch (SQLException tryV2) {
-                // nếu lỗi cột, thử V2
-                try (PreparedStatement ps2 = cn.prepareStatement(sqlV2)) {
-                    ps2.setInt(1, userId);
-                    ps2.setString(2, note);
-                    ps2.setInt(3, requestId);
-                    ps2.setInt(4, userId);
-                    rows = ps2.executeUpdate();
-                }
-            }
+    final String sqlV2 = """
+        UPDATE dbo.Requests
+        SET status = 'CANCELLED',
+            approver_id = ?,                                -- tên cột khác ở schema V2
+            manager_note = CASE
+                WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
+                WHEN manager_note IS NULL OR manager_note = '' THEN CONCAT('[User cancel] ', ?)
+                ELSE CONCAT(manager_note, CHAR(10), '[User cancel] ', ?)
+            END,
+            cancelled_at = SYSDATETIME()
+        WHERE request_id = ?
+          AND employee_id = ?
+          AND UPPER(status) IN ('PENDING','INPROGRESS')
+        """;
 
-            if (rows > 0) {
-                insertHistory(cn, requestId, userId, userName, "CANCELLED", note);
-                cn.commit();
-                return true;
+    try (Connection cn = DBConnection.getConnection()) {
+        cn.setAutoCommit(false);
+        int rows;
+
+        try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
+            int i = 1;
+            ps.setInt(i++, userId);          // processed_by
+            ps.setString(i++, note);         // note for CASE (1)
+            ps.setString(i++, note);         // note for CASE (2)
+            ps.setString(i++, note);         // note for CASE (3)
+            ps.setString(i++, note);         // note for CASE (4)
+            ps.setInt(i++, requestId);       // id
+            ps.setInt(i++, userId);          // user_id =
+            ps.setInt(i++, userId);          // created_by =
+            rows = ps.executeUpdate();
+        } catch (SQLException tryV2) {
+            // Thử schema V2 nếu V1 báo lỗi cột
+            try (PreparedStatement ps2 = cn.prepareStatement(sqlV2)) {
+                int i = 1;
+                ps2.setInt(i++, userId);     // approver_id
+                ps2.setString(i++, note);
+                ps2.setString(i++, note);
+                ps2.setString(i++, note);
+                ps2.setString(i++, note);
+                ps2.setInt(i++, requestId);  // request_id
+                ps2.setInt(i++, userId);     // employee_id =
+                rows = ps2.executeUpdate();
             }
+        }
+
+        if (rows > 0) {
+            // Ghi history: CANCELLED
+            insertHistory(cn, requestId, userId, userName, "CANCELLED", note);
+            cn.commit();
+            return true;
+        } else {
             cn.rollback();
             return false;
         }
     }
+}
 
     // =======================
     // ===== TẠO MỚI (optional)
@@ -1321,6 +1342,8 @@ public class RequestDAO {
         r.setStartDate(rs.getDate("start_date").toLocalDate());
         r.setEndDate(rs.getDate("end_date").toLocalDate());
         r.setStatus(rs.getString("status"));
+
+        
         try {
             r.setManagerNote(rs.getString("manager_note"));
         } catch (SQLException ignore) {
@@ -1339,9 +1362,41 @@ public class RequestDAO {
 
         r.setCreatedBy(created == null ? 0 : ((Number) created).intValue());
         r.setProcessedBy(processed == null ? null : ((Number) processed).intValue());
+    r.setTitle(rs.getString("title"));
 
         return r;
+    }  // <-- đảm bảo có dấu đóng method ở đây
+
+  public int create(Request r) throws SQLException {
+    final String sql =
+        "INSERT INTO dbo.Requests " +
+        "(user_id, type, status, reason, start_date, end_date, leave_type_id) " +
+        "VALUES (?, ?, 'pending', ?, ?, ?, ?)";
+
+    try (Connection cn = DBConnection.getConnection();
+         PreparedStatement ps = cn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+        ps.setInt(1, r.getUserId());
+        ps.setString(2, r.getType());          // ví dụ: 'ANNUAL', 'SICK', ...
+        ps.setString(3, r.getReason());
+
+        if (r.getStartDate() != null) ps.setDate(4, java.sql.Date.valueOf(r.getStartDate()));
+        else ps.setNull(4, java.sql.Types.DATE);
+
+        if (r.getEndDate() != null) ps.setDate(5, java.sql.Date.valueOf(r.getEndDate()));
+        else ps.setNull(5, java.sql.Types.DATE);
+
+        if (r.getLeaveTypeId() != null) ps.setInt(6, (int) r.getLeaveTypeId());
+        else ps.setNull(6, java.sql.Types.INTEGER);
+
+        ps.executeUpdate();
+        try (ResultSet rs = ps.getGeneratedKeys()) {
+            return rs.next() ? rs.getInt(1) : -1;
+        }
     }
+}
+
+
 // Trong RequestDAO
 
     public boolean updateStatusIfPending(int id, String newStatus, int approverId, String note) throws SQLException {

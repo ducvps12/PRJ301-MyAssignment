@@ -38,12 +38,14 @@
          aria-current="${fn:startsWith(_uri, cp.concat('/request/list')) ? 'page' : ''}">
         Requests
       </a>
-
-      <a href="${cp}/request/agenda"
+<c:if test="${isDivLead or isHR}">
+   <a href="${cp}/request/agenda"
          class="navlink ${fn:startsWith(_uri, cp.concat('/request/agenda')) ? 'active' : ''}"
          aria-current="${fn:startsWith(_uri, cp.concat('/request/agenda')) ? 'page' : ''}">
         Agenda
       </a>
+</c:if>
+     
 
    
 

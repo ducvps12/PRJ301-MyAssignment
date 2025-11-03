@@ -515,6 +515,7 @@ public class Request implements Serializable {
         this.createdAt = createdAt;
     }
 
+
     // (tuỳ chọn) fluent style cho tiện khi map từ ResultSet
     public Request withApproverId(Long v) {
         this.approverId = v;
@@ -540,6 +541,10 @@ public void setUserId(Integer id) {
   public Integer getUserId() {
     return userId;
 }
+
+    public Object getLeaveTypeId() {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
 
 
 }

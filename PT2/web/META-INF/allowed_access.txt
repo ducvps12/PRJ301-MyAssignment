@@ -1,0 +1,7 @@
+/
+/login
+/logout
+/student/create
+/student/update
+/assets/            # có thể whitelist cả 1 thư mục tĩnh
+
