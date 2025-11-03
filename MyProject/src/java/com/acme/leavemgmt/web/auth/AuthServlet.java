@@ -79,7 +79,7 @@ public class AuthServlet extends HttpServlet {
             // 3) Xác thực (ghi chú: sau này chuyển sang BCrypt/Argon2)
             User u = userDAO.findByUsernameAndPassword(username, password);
 
-            if (u != null && u.getStatus() == 1) {
+if (u != null && u.isActive()) {
                 // 4) Chống session fixation
                 HttpSession old = req.getSession(false);
                 if (old != null) old.invalidate();

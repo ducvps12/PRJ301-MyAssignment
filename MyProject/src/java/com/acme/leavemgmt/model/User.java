@@ -1,10 +1,11 @@
 /*
- * User model – tương thích với RoleFilter & AuthServlet
- * Hỗ trợ role: ADMIN | DIV_LEADER | TEAM_LEAD | QA_LEAD | STAFF
+ * User model – tương thích RoleFilter & Admin HR
+ * Hỗ trợ cả tên thuộc tính cũ: fullName/department, và mới: fullname/division.
  */
 package com.acme.leavemgmt.model;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Date;
@@ -21,16 +22,21 @@ public class User implements Serializable {
     public static final String ROLE_QA_LEAD    = "QA_LEAD";
     public static final String ROLE_STAFF      = "STAFF";
 
-    // ===== Core fields =====
+    // ===== Core fields (DB) =====
     private int id;
     private String username;
     private String password;
-    private String fullName;
 
-    private String role;        // ADMIN | DIV_LEADER | TEAM_LEAD | QA_LEAD | STAFF
-    private int roleId;         // optional (0 = unknown)
-    private int departmentId;   // optional (0 = unknown)
-    private String department;  // IT | QA | SALE ...
+    /** DB column: fullname (giữ thêm alias fullName cho code cũ) */
+    private String fullname;
+
+    /** DB column: role (code) + tùy chọn roleId để map bảng Roles nếu cần */
+    private String role;
+    private int roleId;               // optional
+
+    /** DB column: division_id + alias departmentId/departmentName để tương thích */
+    private Integer divisionId;       // nullable
+    private String divisionName;
 
     // ===== Contact & profile =====
     private String email;
@@ -40,28 +46,45 @@ public class User implements Serializable {
     private String bio;
     private String avatarUrl;
 
-    // ===== Status & timestamps =====
-    private int status = 1;     // 1 = active, 0 = locked
+    /** DB column: job_title */
+    private String jobTitle;
+
+    /** DB column: join_date, contract_end */
+    private LocalDate joinDate;
+    private LocalDate contractEnd;
+
+    /** DB column: salary */
+    private BigDecimal salary;
+
+    /**
+     * Trạng thái:
+     * - accountStatus: dạng số (1=active/0=locked) – dùng cho auth cũ
+     * - empStatus:     dạng chuỗi (ACTIVE/ON_LEAVE/RESIGNED/TERMINATED) – dùng cho HR
+     *
+     * Getter getStatus() trả về empStatus nếu có, ngược lại suy từ accountStatus.
+     */
+    private int accountStatus = 1;
+    private String empStatus;
+
+    // ===== Timestamps =====
     private Date createdAt;
     private Date updatedAt;
 
     // ===== Login tracking =====
-    /** Lần đăng nhập gần nhất */
     private Date lastLogin;
-    /** IP/thiết bị đăng nhập gần nhất */
     private String lastIp;
 
     public User() {}
 
-    public User(int id, String username, String fullName, String role, String department) {
+    public User(int id, String username, String fullname, String role, String divisionName) {
         this.id = id;
         this.username = username;
-        this.fullName = fullName;
+        this.fullname = fullname;
         this.role = role;
-        this.department = department;
+        this.divisionName = divisionName;
     }
 
-    // ===== Getters / Setters =====
+    // ===== Getters / Setters (đồng bộ với DAO) =====
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
     public int getUserId() { return id; }              // alias
@@ -73,45 +96,45 @@ public class User implements Serializable {
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
 
-    public String getFullName() { return fullName; }
-    public void setFullName(String fullName) { this.fullName = fullName; }
+    // fullname + alias fullName
+    public String getFullname() { return fullname; }
+    public void setFullname(String fullname) { this.fullname = fullname; }
+    public String getFullName() { return fullname; }       // alias cũ
+    public void setFullName(String fullName) { this.fullname = fullName; }
 
     public String getRole() { return role; }
     /** Set role bằng code (VARCHAR). */
     public void setRole(String role) {
         this.role = role;
-        // nếu có bảng map id ↔ code thì cập nhật roleId tương ứng (nếu biết)
         this.roleId = mapRoleCodeToId(role);
     }
-    /** Overload: Set role bằng roleId (INT) – tiện cho ResultSet.getObject(). */
+    /** Overload: Set role bằng roleId (INT). */
     public void setRole(Integer roleId) {
         setRoleId(roleId);
         this.role = mapRoleIdToCode(this.roleId);
     }
-
-    /** Role code chuẩn hoá (upper + fallback STAFF). */
     public String getRoleCode() {
         String r = (role == null || role.isBlank()) ? ROLE_STAFF : role;
         return r.trim().toUpperCase();
     }
-
     public int getRoleId() { return roleId; }
     public void setRoleId(int roleId) { this.roleId = roleId; }
-    /** Null-safe overload. */
     public void setRoleId(Integer roleId) { this.roleId = (roleId == null) ? 0 : roleId; }
 
-    public int getDepartmentId() { return departmentId; }
-    public void setDepartmentId(int departmentId) { this.departmentId = departmentId; }
-    /** Null-safe overload. */
-    public void setDepartmentId(Integer departmentId) { this.departmentId = (departmentId == null) ? 0 : departmentId; }
+    // division + alias department
+    public Integer getDivisionId() { return divisionId; }
+    public void setDivisionId(Integer divisionId) { this.divisionId = divisionId; }
+    public String getDivisionName() { return divisionName; }
+    public void setDivisionName(String divisionName) { this.divisionName = divisionName; }
 
-    public String getDepartment() { return department; }
-    /** Set department bằng tên. */
-    public void setDepartment(String department) { this.department = department; }
-    /** Overload: nhận departmentId (INT). */
-    public void setDepartment(Integer departmentId) { setDepartmentId(departmentId); }
-    public String getDeptName() { return department; }     // alias
-    public void setDeptName(String deptName) { this.department = deptName; }
+    // Aliases cho code cũ dùng department*
+    public int getDepartmentId() { return divisionId == null ? 0 : divisionId; }
+    public void setDepartmentId(int departmentId) { this.divisionId = departmentId; }
+    public void setDepartmentId(Integer departmentId) { this.divisionId = departmentId; }
+    public String getDepartment() { return divisionName; }
+    public void setDepartment(String department) { this.divisionName = department; }
+    public String getDeptName() { return divisionName; }
+    public void setDeptName(String deptName) { this.divisionName = deptName; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -119,10 +142,28 @@ public class User implements Serializable {
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
-    public int getStatus() { return status; }
-    public void setStatus(int status) { this.status = status; }
-    public boolean isActive() { return status == 1; }
-    public String getStatusText() { return isActive() ? "ACTIVE" : "INACTIVE"; }
+    // HR fields
+    public String getJobTitle() { return jobTitle; }
+    public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
+
+    public LocalDate getJoinDate() { return joinDate; }
+    public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
+
+    public LocalDate getContractEnd() { return contractEnd; }
+    public void setContractEnd(LocalDate contractEnd) { this.contractEnd = contractEnd; }
+
+    public BigDecimal getSalary() { return salary; }
+    public void setSalary(BigDecimal salary) { this.salary = salary; }
+
+    // Status (String/Int đồng thời)
+    public String getStatus() {
+        if (empStatus != null && !empStatus.isBlank()) return empStatus;
+        return accountStatus == 1 ? "ACTIVE" : "INACTIVE";
+    }
+    public void setStatus(String status) { this.empStatus = status; }
+    public int getAccountStatus() { return accountStatus; }
+    public void setStatus(int status) { this.accountStatus = status; } // giữ tương thích
+    public boolean isActive() { return accountStatus == 1; }
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
@@ -138,61 +179,40 @@ public class User implements Serializable {
 
     public Date getCreatedAt() { return createdAt; }
     public void setCreatedAt(Date createdAt) { this.createdAt = createdAt; }
-
     public Date getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Date updatedAt) { this.updatedAt = updatedAt; }
 
-    // ===== Login tracking getters/setters =====
-    public Date getLastLogin() {
-        return lastLogin;
-    }
-    public void setLastLogin(Date lastLogin) {
-        this.lastLogin = lastLogin;
-    }
+    public Date getLastLogin() { return lastLogin; }
+    public void setLastLogin(Date lastLogin) { this.lastLogin = lastLogin; }
 
-    public String getLastIp() {
-        return lastIp;
-    }
-    public void setLastIp(String lastIp) {
-        this.lastIp = lastIp;
-    }
+    public String getLastIp() { return lastIp; }
+    public void setLastIp(String lastIp) { this.lastIp = lastIp; }
 
     // ===== Helpers for authorization =====
-    public boolean hasRole(String r) {
-        return getRoleCode().equalsIgnoreCase(r);
-    }
+    public boolean hasRole(String r) { return getRoleCode().equalsIgnoreCase(r); }
     public boolean hasAnyRole(String... roles) {
         String rc = getRoleCode();
         return Arrays.stream(roles).anyMatch(r -> rc.equalsIgnoreCase(r));
     }
     public boolean isAdmin() { return hasRole(ROLE_ADMIN); }
-
-    /** Leader: DIV_LEADER | TEAM_LEAD | QA_LEAD | (hậu tố *_LEAD/*_LEADER) */
+    /** Leader: DIV_LEADER | TEAM_LEAD | QA_LEAD | hậu tố *_LEAD/*_LEADER */
     public boolean isLead() {
         String rc = getRoleCode();
         if (hasAnyRole(ROLE_DIV_LEADER, ROLE_TEAM_LEAD, ROLE_QA_LEAD)) return true;
         return rc.endsWith("_LEAD") || rc.endsWith("_LEADER")
-                || rc.equals("LEADER") || rc.equals("MANAGER"); // linh hoạt
+                || rc.equals("LEADER") || rc.equals("MANAGER");
     }
-
-    /** Alias theo tên method mà RoleFilter/Servlet đang dùng. */
     public boolean isLeader() { return isLead(); }
-
     public boolean isStaff() { return hasAnyRole(ROLE_STAFF, "EMPLOYEE"); }
-
     public boolean canAccessAdminDashboard() { return isAdmin() || isLead(); }
     public boolean canAccessAdminUsers()     { return isAdmin(); }
     public boolean canApproveRequests()      { return isAdmin() || isLead(); }
 
     // ===== Display / Debug =====
     public String getDisplayName() {
-        return (fullName != null && !fullName.isBlank()) ? fullName : username;
+        return (fullname != null && !fullname.isBlank()) ? fullname : username;
     }
-
-    /** tiện cho JSP: nếu có lastLogin thì trả về true */
-    public boolean hasLastLogin() {
-        return lastLogin != null;
-    }
+    public boolean hasLastLogin() { return lastLogin != null; }
 
     @Override
     public boolean equals(Object o) {
@@ -200,7 +220,6 @@ public class User implements Serializable {
         if (!(o instanceof User user)) return false;
         return id == user.id;
     }
-
     @Override
     public int hashCode() { return Objects.hash(id); }
 
@@ -210,16 +229,15 @@ public class User implements Serializable {
                 ", username='" + username + '\'' +
                 ", role='" + getRoleCode() + '\'' +
                 ", roleId=" + roleId +
-                ", departmentId=" + departmentId +
-                ", department='" + department + '\'' +
-                ", status=" + status +
+                ", divisionId=" + divisionId +
+                ", divisionName='" + divisionName + '\'' +
+                ", status='" + getStatus() + '\'' +
                 ", lastLogin=" + lastLogin +
                 ", lastIp='" + lastIp + '\'' +
                 '}';
     }
 
-    // ===== Mapping helpers =====
-    /** Map roleId (INT) -> role code (VARCHAR). Điều chỉnh theo DB của bạn. */
+    // ===== Mapping helpers cho roleId <-> role code (tùy DB) =====
     private static String mapRoleIdToCode(int id) {
         switch (id) {
             case 1: return ROLE_ADMIN;
@@ -227,11 +245,9 @@ public class User implements Serializable {
             case 3: return ROLE_TEAM_LEAD;
             case 4: return ROLE_QA_LEAD;
             case 5: return ROLE_STAFF;
-            default: return null; // unknown
+            default: return null;
         }
     }
-
-    /** Map role code (VARCHAR) -> roleId (INT). Điều chỉnh theo DB của bạn. */
     private static int mapRoleCodeToId(String code) {
         if (code == null) return 0;
         switch (code.trim().toUpperCase()) {

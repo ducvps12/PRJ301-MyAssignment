@@ -8,7 +8,7 @@
   <title>Đăng nhập · LeaveMgmt</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/login.css?v=1">
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/login.css?v=2">
 </head>
 <body>
   <!-- Hiệu ứng icon HR bay -->
@@ -52,6 +52,7 @@
           </div>
         </c:if>
 
+        <!-- FORM: login nội bộ -->
         <form id="loginForm" method="post" action="${pageContext.request.contextPath}/login" novalidate>
           <!-- CSRF -->
           <input type="hidden" name="_csrf" value="${sessionScope._csrf}">
@@ -70,7 +71,6 @@
             <input id="password" name="password" class="input" type="password"
                    autocomplete="current-password" required aria-required="true"
                    aria-describedby="formHelp" />
-            <button type="button" class="toggle" id="btnTogglePw" aria-label="Hiện/ẩn mật khẩu">👁️</button>
           </div>
 
           <div class="row">
@@ -83,6 +83,17 @@
 
           <button class="btn" id="btnSubmit" type="submit">Đăng nhập</button>
 
+          <!-- Divider -->
+          <div class="or" role="separator" aria-label="hoặc">
+            <span></span> <em>hoặc</em> <span></span>
+          </div>
+
+          <!-- Đăng nhập bằng Google (OAuth2/OpenID Connect) -->
+          <a class="btn google" href="${pageContext.request.contextPath}/oauth/google/start" aria-label="Đăng nhập bằng Google">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" width="18" height="18" style="vertical-align:middle;margin-right:8px;">
+            Đăng nhập bằng Google
+          </a>
+
           <p class="help" id="formHelp" aria-live="polite"></p>
 
           <div class="meta">
@@ -94,6 +105,17 @@
       </div>
     </div><!-- /right-col -->
   </div><!-- /wrap -->
+
+  <!-- Khối CSS nhỏ gọn cho divider + nút Google (nếu bạn chưa thêm trong login.css) -->
+  <style>
+    .or{display:flex;align-items:center;gap:8px;margin:16px 0;color:var(--m,#6b7280)}
+    .or span{flex:1;height:1px;background:var(--b,#e5e7eb)}
+    .or em{font-style:normal;font-size:.95rem}
+    .btn.google{display:inline-flex;align-items:center;justify-content:center;width:100%;
+      border:1px solid #dadce0;border-radius:8px;padding:10px 14px;background:#fff;color:#202124;
+      font-weight:600;text-decoration:none}
+    .btn.google:hover{background:#f8f9fa}
+  </style>
 
   <script>
     (function () {

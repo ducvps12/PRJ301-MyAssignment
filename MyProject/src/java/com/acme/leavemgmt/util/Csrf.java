@@ -15,20 +15,6 @@ import java.util.Base64;
  */
 public final class Csrf {
 
-    public static boolean isTokenValid(HttpServletRequest req) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    public static void addToken(HttpServletRequest req) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    static String token(HttpServletRequest req) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    private Csrf() {}
-
     // tên attr / param / header chuẩn
     public static final String ATTR   = "csrf";
     public static final String PARAM  = "_csrf";          // tên input mặc định
@@ -37,32 +23,46 @@ public final class Csrf {
 
     private static final SecureRandom RNG = new SecureRandom();
 
+    /* ===================== Bổ sung triển khai 3 method còn thiếu ===================== */
+
+    /** Alias: kiểm tra hợp lệ của token cho request hiện tại. */
+    public static boolean isTokenValid(HttpServletRequest req) {
+        return valid(req);
+    }
+
+    /** Đảm bảo có token trong session và đẩy xuống request để JSP render. */
+    public static void addToken(HttpServletRequest req) {
+        String t = ensureToken(req.getSession());
+        // đặt nhiều key để các form cũ/mới đều tận dụng được
+        req.setAttribute("csrf_token", t);
+        req.setAttribute("_csrf", t);
+        // tuỳ chọn: nếu bạn muốn cũng expose theo tên ATTR
+        req.setAttribute(ATTR, t);
+    }
+
+    /** Lấy/khởi tạo token hiện tại gắn với session của request. */
+    static String token(HttpServletRequest req) {
+        return ensureToken(req.getSession());
+    }
+
     /* =======================================================================
        API public để servlet gọi
        ======================================================================= */
 
-    /**
-     * Gọi ở doGet: đảm bảo có token trong session và đẩy xuống request để JSP lấy render.
-     * JSP có thể dùng: ${csrf_token} hoặc ${_csrf}
-     */
+    /** Gọi ở doGet: tương tự addToken, giữ lại để tương thích. */
     public static void protect(HttpServletRequest req) {
         HttpSession ses = req.getSession();
         String token = ensureToken(ses);
-        // đặt cả 2 tên để form nào cũng xài được
         req.setAttribute("csrf_token", token);
         req.setAttribute("_csrf", token);
     }
 
-    /**
-     * Gọi ở doPost: kiểm tra token gửi lên.
-     */
+    /** Gọi ở doPost: kiểm tra token gửi lên. */
     public static boolean verify(HttpServletRequest req) {
         return valid(req);
     }
 
-    /**
-     * Bạn đã viết verifyToken(...) rồi, cứ để để tương thích.
-     */
+    /** Alias cho verify(...) để tương thích code cũ. */
     public static boolean verifyToken(HttpServletRequest req) {
         return valid(req);
     }
@@ -151,4 +151,6 @@ public final class Csrf {
         }
         return diff == 0;
     }
+
+    private Csrf() {}
 }

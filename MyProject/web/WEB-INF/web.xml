@@ -280,6 +280,21 @@
 </servlet-mapping>
 
 
+
+<servlet>
+  <servlet-name>AdminSettingsServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSettingsServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+
+<!-- Maps -->
+<servlet-mapping>
+  <servlet-name>AdminSettingsServlet</servlet-name>
+  <url-pattern>/admin/settings</url-pattern>
+</servlet-mapping>
+
+
+
 <servlet>
   <servlet-name>ActivityServlet</servlet-name>
   <servlet-class>com.acme.leavemgmt.servlet.ActivityServlet</servlet-class>
@@ -293,6 +308,36 @@
 <servlet-mapping>
   <servlet-name>ActivityServlet</servlet-name>
   <url-pattern>/admin/activity</url-pattern>
+</servlet-mapping>
+<!-- HR Dashboard -->
+<servlet>
+  <servlet-name>AdminHrDashboardServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrDashboardServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminHrDashboardServlet</servlet-name>
+  <url-pattern>/admin/hr</url-pattern>
+</servlet-mapping>
+
+<!-- HR List -->
+<servlet>
+  <servlet-name>AdminHrListServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrListServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminHrListServlet</servlet-name>
+  <url-pattern>/admin/hr/list</url-pattern>
+</servlet-mapping>
+
+<!-- HR Edit -->
+<servlet>
+  <servlet-name>AdminHrEditServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrEditServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminHrEditServlet</servlet-name>
+  <url-pattern>/admin/hr/edit</url-pattern>
 </servlet-mapping>
 
 
