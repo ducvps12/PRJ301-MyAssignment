@@ -54,7 +54,6 @@
 </head>
 <body>
 
-  <%-- Header/NAV chung của app --%>
   <jsp:include page="/WEB-INF/views/common/_header.jsp"/>
 
   <main class="wrap">
@@ -69,6 +68,10 @@
     <c:set var="dis" value="${!canEdit ? 'disabled' : ''}"/>
     <c:set var="isAdmin" value="${sessionScope.currentUser != null && sessionScope.currentUser.role == 'ADMIN'}"/>
 
+    <%-- Chuẩn hoá status để không còn lỗi ép kiểu EL --%>
+    <c:set var="s" value="${u.status}"/>
+    <c:set var="isActive" value="${s == 'ACTIVE' or s == '1' or fn:toLowerCase(s) == 'true'}"/>
+
     <div class="card profile ${!canEdit ? 'readonly' : ''}">
       <div>
         <div class="avatar big">
@@ -79,7 +82,8 @@
             <c:otherwise>
               <c:choose>
                 <c:when test="${not empty u.fullName}">${fn:substring(u.fullName,0,1)}</c:when>
-                <c:otherwise>${fn:substring(u.username,0,1)}</c:otherwise>
+                <c:when test="${not empty u.username}">${fn:substring(u.username,0,1)}</c:when>
+                <c:otherwise>?</c:otherwise>
               </c:choose>
             </c:otherwise>
           </c:choose>
@@ -91,12 +95,17 @@
             <span class="chip">Tài khoản: ${u.username}</span>
           </div>
           <div class="row" style="margin-top:8px">
-            <span class="chip ${u.status == 1 ? 'ok' : ''}">
-              Trạng thái: <strong>${u.status == 1 ? 'Active' : 'Inactive'}</strong>
+            <span class="chip ${isActive ? 'ok' : ''}">
+              Trạng thái:
+              <strong>
+                <c:out value="${isActive ? 'ACTIVE' : (empty s ? 'UNKNOWN' : s)}"/>
+              </strong>
             </span>
-            <c:if test="${not empty u.createdAt}">
+
+            <%-- fmt cần java.util.Date: dùng getter createdAtDate trong model --%>
+            <c:if test="${not empty u.createdAtDate}">
               <span class="chip">
-                Tạo lúc: <fmt:formatDate value="${u.createdAt}" pattern="dd/MM/yyyy HH:mm"/>
+                Tạo lúc: <fmt:formatDate value="${u.createdAtDate}" pattern="dd/MM/yyyy HH:mm"/>
               </span>
             </c:if>
           </div>
@@ -105,13 +114,11 @@
 
       <div class="info">
         <form method="post" action="${pageContext.request.contextPath}/profile" autocomplete="on">
-          <%-- Họ tên --%>
           <div class="full">
             <label>Họ và tên</label>
             <input type="text" name="fullName" value="${u.fullName}" ${ro} ${canEdit ? 'required' : ''}/>
           </div>
 
-          <%-- Email / Phone --%>
           <div>
             <label>Email</label>
             <input type="email" name="email" value="${u.email}" ${ro}/>
@@ -121,7 +128,6 @@
             <input name="phone" value="${u.phone}" ${ro}/>
           </div>
 
-          <%-- Department / Role --%>
           <div>
             <label>Phòng ban</label>
             <input list="deptList" name="department" value="${u.department}" ${ro}/>
@@ -149,30 +155,38 @@
             </c:choose>
           </div>
 
-          <%-- Address --%>
           <div class="full">
             <label>Địa chỉ</label>
             <input name="address" value="${u.address}" ${ro}/>
           </div>
 
-          <%-- Birthday / Avatar URL --%>
           <div>
             <label>Ngày sinh</label>
-            <%-- Nếu model dùng LocalDate, EL sẽ in yyyy-MM-dd OK cho input[type=date] --%>
-            <input type="date" name="birthday" value="${u.birthday}" ${ro}/>
+            <%-- Hỗ trợ cả LocalDate (in thẳng) và java.util.Date qua u.birthdayDate --%>
+            <c:choose>
+              <c:when test="${not empty u.birthday}">
+                <input type="date" name="birthday" value="${u.birthday}" ${ro}/>
+              </c:when>
+              <c:when test="${not empty u.birthdayDate}">
+                <input type="date" name="birthday"
+                       value="<fmt:formatDate value='${u.birthdayDate}' pattern='yyyy-MM-dd'/>" ${ro}/>
+              </c:when>
+              <c:otherwise>
+                <input type="date" name="birthday" ${ro}/>
+              </c:otherwise>
+            </c:choose>
           </div>
+
           <div>
             <label>Avatar URL</label>
             <input name="avatarUrl" value="${u.avatarUrl}" ${ro}/>
           </div>
 
-          <%-- Bio --%>
           <div class="full">
             <label>Giới thiệu</label>
             <textarea name="bio" rows="3" ${ro}>${u.bio}</textarea>
           </div>
 
-          <%-- Actions --%>
           <div class="full actions">
             <c:if test="${canEdit}">
               <button class="btn pri" type="submit">Cập nhật</button>
@@ -183,15 +197,12 @@
             </c:if>
           </div>
 
-          <%-- Flash message --%>
           <c:if test="${not empty ok}">
             <div class="alert ok full">${ok}</div>
           </c:if>
           <c:if test="${not empty error}">
             <div class="alert no full">${error}</div>
           </c:if>
-
-          <%-- Back-compat: nếu servlet dùng ?ok=1 --%>
           <c:if test="${param.ok == '1'}">
             <div class="alert ok full">Cập nhật thành công!</div>
           </c:if>
@@ -204,8 +215,6 @@
     </div>
   </main>
 
-  <%-- Footer chung --%>
   <jsp:include page="/WEB-INF/views/common/_footer.jsp"/>
-
 </body>
 </html>

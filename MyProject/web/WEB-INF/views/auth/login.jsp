@@ -33,7 +33,6 @@
         <!-- server-side theme switch (endpoint /theme giữ nguyên) -->
         <form method="post" action="${pageContext.request.contextPath}/theme">
           <input type="hidden" name="redirect" value="${pageContext.request.requestURI}">
-          <button type="submit" class="tiny" title="Đổi theme (sáng/tối)">🌓 Đổi theme</button>
         </form>
       </div>
 

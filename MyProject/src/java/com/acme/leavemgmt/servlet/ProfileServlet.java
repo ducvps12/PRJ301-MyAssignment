@@ -3,23 +3,29 @@ package com.acme.leavemgmt.servlet;
 import com.acme.leavemgmt.dao.UserDAO;
 import com.acme.leavemgmt.model.User;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.time.LocalDate;
 
+@WebServlet("/profile")
 public class ProfileServlet extends HttpServlet {
+  private static final long serialVersionUID = 1L;
   private final UserDAO userDAO = new UserDAO();
 
   // ===== GET: hiển thị hồ sơ =====
-  @Override protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+  @Override
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
 
     User cu = (User) req.getSession().getAttribute("currentUser");
     try {
       if (cu == null) {
-        // Cho xem read-only dạng Guest (nếu muốn ép login, thay bằng redirect tới /login?next=/profile)
+        // Cho xem read-only dạng Guest (nếu muốn ép login, redirect /login?next=/profile)
         User guest = new User();
-        guest.setFullName("Guest"); guest.setDepartment("—"); guest.setRole("—");
+        guest.setFullName("Guest");
+        guest.setDepartment("—");
+        guest.setRole("—");
         req.setAttribute("me", guest);
         req.setAttribute("canEdit", false);
       } else {
@@ -37,16 +43,21 @@ public class ProfileServlet extends HttpServlet {
 
       req.getRequestDispatcher("/WEB-INF/views/profile.jsp").forward(req, resp);
     } catch (Exception e) {
-      throw new ServletException(e);
+      e.printStackTrace();
+      throw new ServletException("Không tải được hồ sơ người dùng", e);
     }
   }
 
   // ===== POST: cập nhật hồ sơ =====
-  @Override protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+  @Override
+  protected void doPost(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
 
     User cu = (User) req.getSession().getAttribute("currentUser");
-    if (cu == null) { resp.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+    if (cu == null) {
+      resp.sendError(HttpServletResponse.SC_FORBIDDEN);
+      return;
+    }
 
     try {
       req.setCharacterEncoding("UTF-8");
@@ -54,11 +65,11 @@ public class ProfileServlet extends HttpServlet {
       // Lấy input
       String fullName   = trim(req.getParameter("fullName"));
       String department = trim(req.getParameter("department"));
-      String roleInput  = trim(req.getParameter("role"));       // sẽ kiểm soát bên dưới
+      String roleInput  = trim(req.getParameter("role")); // kiểm soát bên dưới
       String email      = trim(req.getParameter("email"));
       String phone      = trim(req.getParameter("phone"));
       String address    = trim(req.getParameter("address"));
-      String birthdayS  = trim(req.getParameter("birthday"));   // yyyy-MM-dd hoặc rỗng
+      String birthdayS  = trim(req.getParameter("birthday")); // yyyy-MM-dd hoặc rỗng
       String bio        = trim(req.getParameter("bio"));
       String avatarUrl  = trim(req.getParameter("avatarUrl"));
 
@@ -66,23 +77,24 @@ public class ProfileServlet extends HttpServlet {
       if (email != null && !email.isBlank() &&
           !email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
         flashErr(req, "Email không hợp lệ");
-        resp.sendRedirect(req.getContextPath()+"/profile");
+        resp.sendRedirect(req.getContextPath() + "/profile");
         return;
       }
       if (phone != null && !phone.isBlank() &&
           !phone.matches("^[0-9+()\\-\\s]{6,20}$")) {
         flashErr(req, "Số điện thoại không hợp lệ");
-        resp.sendRedirect(req.getContextPath()+"/profile");
+        resp.sendRedirect(req.getContextPath() + "/profile");
         return;
       }
 
       // Parse birthday (nullable)
       LocalDate birthday = null;
       if (birthdayS != null && !birthdayS.isBlank()) {
-        try { birthday = LocalDate.parse(birthdayS); }
-        catch (Exception ignore) {
+        try {
+          birthday = LocalDate.parse(birthdayS);
+        } catch (Exception ignore) {
           flashErr(req, "Định dạng ngày sinh phải là yyyy-MM-dd");
-          resp.sendRedirect(req.getContextPath()+"/profile");
+          resp.sendRedirect(req.getContextPath() + "/profile");
           return;
         }
       }
@@ -90,14 +102,13 @@ public class ProfileServlet extends HttpServlet {
       // Chống leo quyền: chỉ ADMIN mới được thay đổi role
       String roleToSave;
       if (cu.getRole() != null && cu.getRole().equalsIgnoreCase("ADMIN")) {
-        roleToSave = roleInput; // admin được thay
+        roleToSave = roleInput;
       } else {
-        // giữ nguyên role hiện tại trong DB
         User meNow = userDAO.findById(cu.getId());
         roleToSave = meNow != null ? meNow.getRole() : null;
       }
 
-      // Gọi DAO cập nhật
+      // Cập nhật
       boolean ok = userDAO.updateProfile(
           cu.getId(),
           nullIfBlank(fullName),
@@ -106,7 +117,7 @@ public class ProfileServlet extends HttpServlet {
           nullIfBlank(email),
           nullIfBlank(phone),
           nullIfBlank(address),
-          birthday,                 // LocalDate
+          birthday,
           nullIfBlank(bio),
           nullIfBlank(avatarUrl)
       );
@@ -123,9 +134,10 @@ public class ProfileServlet extends HttpServlet {
       }
 
       // PRG
-      resp.sendRedirect(req.getContextPath()+"/profile");
+      resp.sendRedirect(req.getContextPath() + "/profile");
     } catch (Exception e) {
-      throw new ServletException(e);
+      e.printStackTrace();
+      throw new ServletException("Không cập nhật được hồ sơ người dùng", e);
     }
   }
 

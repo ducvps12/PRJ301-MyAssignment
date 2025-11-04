@@ -26,21 +26,39 @@
       <thead>
         <tr><th>Nhân sự</th><th>Phòng ban</th><th>Từ</th><th>Đến</th></tr>
       </thead>
-      <tbody>
-        <c:forEach items="${todayLeaves}" var="r">
-          <tr>
-            <td><c:out value="${r.fullName}"/></td>
-            <td><c:out value="${empty r.divisionName ? '—' : r.divisionName}"/></td>
-            <td><fmt:formatDate value="${r.startDate}" pattern="dd/MM/yyyy"/></td>
-            <td><fmt:formatDate value="${r.endDate}"   pattern="dd/MM/yyyy"/></td>
-          </tr>
-        </c:forEach>
-        <c:if test="${empty todayLeaves}">
-          <tr><td colspan="4" class="muted">Hôm nay không có ai nghỉ.</td></tr>
-        </c:if>
-      </tbody>
-    </table>
-  </div>
+
+
+
+     <tbody>
+  <c:forEach items="${todayLeaves}" var="r">
+    <tr>
+      <td><c:out value="${r.fullName}"/></td>
+      <td><c:out value="${empty r.divisionName ? '—' : r.divisionName}"/></td>
+
+      <td>
+        <c:choose>
+          <c:when test="${not empty r.startDate}">
+            <fmt:formatDate value="${r.startDate}" pattern="dd/MM/yyyy"/>
+          </c:when>
+          <c:otherwise>—</c:otherwise>
+        </c:choose>
+      </td>
+
+      <td>
+        <c:choose>
+          <c:when test="${not empty r.endDate}">
+            <fmt:formatDate value="${r.endDate}" pattern="dd/MM/yyyy"/>
+          </c:when>
+          <c:otherwise>—</c:otherwise>
+        </c:choose>
+      </td>
+    </tr>
+  </c:forEach>
+
+  <c:if test="${empty todayLeaves}">
+    <tr><td colspan="4" class="muted">Hôm nay không có ai nghỉ.</td></tr>
+  </c:if>
+</tbody>
 
   <jsp:include page="/WEB-INF/views/common/_admin_footer.jsp"/>
 </body>

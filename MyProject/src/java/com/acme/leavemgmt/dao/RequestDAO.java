@@ -743,70 +743,60 @@ private static Integer insertV2(Connection cn, String sql, Request r) throws SQL
      * Hủy yêu cầu: chỉ cho phép khi là chủ đơn và trạng thái còn INPROGRESS.
      * Ghi manager_note (lý do hủy) và người xử lý = chính người hủy.
      */
-    public boolean cancelRequest(int requestId, int userId, String userName, String note) throws SQLException {
-    final String sqlV1 = """
-        UPDATE dbo.Requests
-        SET status = 'CANCELLED',
-            processed_by = ?,                               -- nếu không có cột này thì sẽ rơi sang V2
-            manager_note = CASE
-                WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
-                WHEN manager_note IS NULL OR manager_note = '' THEN CONCAT('[User cancel] ', ?)
-                ELSE CONCAT(manager_note, CHAR(10), '[User cancel] ', ?)
-            END,
-            cancelled_at = SYSDATETIME()                    -- nếu có cột, OK; nếu không có thì vẫn chạy được
-        WHERE id = ?
-          AND (user_id = ? OR created_by = ?)               -- chấp nhận cả hai
-          AND UPPER(status) IN ('PENDING','INPROGRESS')
-        """;
+   public boolean cancelRequest(int requestId, int userId, String userName, String note) throws SQLException {
+    // Ghi chú:
+    // - Requests:       dùng [id], [processed_by], [manager_note], [updated_at]
+    // - KHÔNG dùng:     request_id, cancelled_at (không tồn tại trong schema hiện tại)
+    // - Trạng thái cho phép hủy: PENDING, INPROGRESS (tuỳ bạn)
 
-    final String sqlV2 = """
-        UPDATE dbo.Requests
-        SET status = 'CANCELLED',
-            approver_id = ?,                                -- tên cột khác ở schema V2
-            manager_note = CASE
-                WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
-                WHEN manager_note IS NULL OR manager_note = '' THEN CONCAT('[User cancel] ', ?)
-                ELSE CONCAT(manager_note, CHAR(10), '[User cancel] ', ?)
-            END,
-            cancelled_at = SYSDATETIME()
-        WHERE request_id = ?
-          AND employee_id = ?
-          AND UPPER(status) IN ('PENDING','INPROGRESS')
-        """;
+    final String SQL_UPDATE_REQUEST =
+        "UPDATE dbo.[Requests] " +
+        "SET [status] = 'CANCELLED', " +
+        "    [processed_by] = ?, " +
+        "    [manager_note] = CASE " +
+        "        WHEN NULLIF(LTRIM(RTRIM(?)),'') IS NULL THEN [manager_note] " +
+        "        WHEN [manager_note] IS NULL OR [manager_note] = '' THEN CONCAT('[User cancel] ', ?) " +
+        "        ELSE CONCAT([manager_note], CHAR(10), '[User cancel] ', ?) " +
+        "    END, " +
+        "    [updated_at] = SYSDATETIME() " +
+        "WHERE [id] = ? " +
+        "  AND ([user_id] = ? OR [created_by] = ?) " +
+        "  AND UPPER([status]) IN ('PENDING','INPROGRESS')";
+
+    // (Tuỳ chọn) Nếu có bảng con RequestApprovals với FK request_id:
+    final String SQL_CANCEL_APPROVALS =
+        "UPDATE dbo.[RequestApprovals] " +
+        "SET [status] = 'CANCELLED', [note] = ?, [updated_at] = SYSDATETIME() " +
+        "WHERE [request_id] = ? AND UPPER([status]) = 'PENDING'";
 
     try (Connection cn = DBConnection.getConnection()) {
         cn.setAutoCommit(false);
-        int rows;
+        int rowsReq;
 
-        try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
+        String clean = (note == null) ? null : note.trim();
+
+        // 1) Hủy ở bảng Requests
+        try (PreparedStatement ps = cn.prepareStatement(SQL_UPDATE_REQUEST)) {
             int i = 1;
-            ps.setInt(i++, userId);          // processed_by
-            ps.setString(i++, note);         // note for CASE (1)
-            ps.setString(i++, note);         // note for CASE (2)
-            ps.setString(i++, note);         // note for CASE (3)
-            ps.setString(i++, note);         // note for CASE (4)
-            ps.setInt(i++, requestId);       // id
-            ps.setInt(i++, userId);          // user_id =
-            ps.setInt(i++, userId);          // created_by =
-            rows = ps.executeUpdate();
-        } catch (SQLException tryV2) {
-            // Thử schema V2 nếu V1 báo lỗi cột
-            try (PreparedStatement ps2 = cn.prepareStatement(sqlV2)) {
-                int i = 1;
-                ps2.setInt(i++, userId);     // approver_id
-                ps2.setString(i++, note);
-                ps2.setString(i++, note);
-                ps2.setString(i++, note);
-                ps2.setString(i++, note);
-                ps2.setInt(i++, requestId);  // request_id
-                ps2.setInt(i++, userId);     // employee_id =
-                rows = ps2.executeUpdate();
-            }
+            ps.setInt(i++, userId);     // processed_by
+            ps.setString(i++, clean);   // CASE check null/empty
+            ps.setString(i++, clean);   // CONCAT when empty
+            ps.setString(i++, clean);   // CONCAT when append
+            ps.setInt(i++, requestId);  // WHERE id = ?
+            ps.setInt(i++, userId);     // AND user_id = ?
+            ps.setInt(i++, userId);     // OR  created_by = ?
+            rowsReq = ps.executeUpdate();
         }
 
-        if (rows > 0) {
-            // Ghi history: CANCELLED
-            insertHistory(cn, requestId, userId, userName, "CANCELLED", note);
+        // 2) (Tuỳ chọn) Hủy các pending approval con – bỏ qua lỗi nếu bảng không tồn tại
+        if (rowsReq > 0) {
+            try (PreparedStatement ps2 = cn.prepareStatement(SQL_CANCEL_APPROVALS)) {
+                ps2.setString(1, clean == null ? "" : clean);
+                ps2.setInt(2, requestId);
+                try { ps2.executeUpdate(); } catch (SQLException ignoreIfNoChild) { /* bảng con có thể chưa tạo */ }
+            } catch (SQLException ignoreIfNoChild) { /* không có bảng con */ }
+
+            insertHistory(cn, requestId, userId, userName, "CANCELLED", clean);
             cn.commit();
             return true;
         } else {
@@ -901,6 +891,87 @@ private static Integer insertV2(Connection cn, String sql, Request r) throws SQL
             return ps.executeUpdate();
         }
     }
+
+
+
+
+public int duplicateFrom(int srcId, int newUserId, String newUserName,
+                         boolean copyAttachments,
+                         String overrideReason,
+                         LocalDate overrideStart,
+                         LocalDate overrideEnd,
+                         Integer overrideLeaveTypeId) throws SQLException {
+
+    String sqlInsert = """
+        INSERT INTO Requests (user_id, type, status, reason, start_date, end_date,
+                              leave_type_id, created_at, updated_at, processed_by,
+                              manager_note, approved_by, approved_at, approve_note)
+        SELECT ?, r.type, 'pending',
+               COALESCE(?, r.reason),
+               COALESCE(?, r.start_date),
+               COALESCE(?, r.end_date),
+               COALESCE(?, r.leave_type_id),
+               sysdatetime(), NULL, NULL, NULL, NULL, NULL, NULL
+        FROM Requests r WHERE r.id = ?
+        """;
+
+    try (Connection c = DBConnection.getConnection();
+         PreparedStatement ps = c.prepareStatement(sqlInsert, Statement.RETURN_GENERATED_KEYS)) {
+
+        ps.setInt(1, newUserId);
+        ps.setString(2, overrideReason);
+        if (overrideStart != null) ps.setDate(3, Date.valueOf(overrideStart)); else ps.setNull(3, Types.DATE);
+        if (overrideEnd   != null) ps.setDate(4, Date.valueOf(overrideEnd));   else ps.setNull(4, Types.DATE);
+        if (overrideLeaveTypeId != null) ps.setInt(5, overrideLeaveTypeId);   else ps.setNull(5, Types.INTEGER);
+        ps.setInt(6, srcId);
+
+        int n = ps.executeUpdate();
+        if (n == 0) throw new SQLException("Duplicate failed");
+
+        int newId;
+        try (ResultSet rs = ps.getGeneratedKeys()) {
+            rs.next();
+            newId = rs.getInt(1);
+        }
+
+        // (Optional) copy attachments: giữ file_name, file_path… Nếu không muốn copy path, thay bằng NULL.
+        if (copyAttachments) {
+            String sqlAtt = """
+              INSERT INTO Request_Attachments (request_id, file_name, file_path, uploaded_by, uploaded_at)
+              SELECT ?, file_name, file_path, ?, uploaded_at
+              FROM Request_Attachments WHERE request_id = ?
+            """;
+            try (PreparedStatement pa = c.prepareStatement(sqlAtt)) {
+                pa.setInt(1, newId);
+                pa.setInt(2, newUserId);
+                pa.setInt(3, srcId);
+                pa.executeUpdate();
+            }
+        }
+
+        // Ghi lịch sử
+        String note = "Duplicated from #" + srcId;
+        String sqlHis = """
+            INSERT INTO Request_History (request_id, action, note, acted_by, acted_by_name, acted_at)
+            VALUES (?, 'CREATED', ?, ?, ?, sysdatetime())
+        """;
+        try (PreparedStatement ph = c.prepareStatement(sqlHis)) {
+            ph.setInt(1, newId);
+            ph.setString(2, note);
+            ph.setInt(3, newUserId);
+            ph.setString(4, newUserName != null ? newUserName : ("User#" + newUserId));
+            ph.executeUpdate();
+        }
+
+        return newId;
+    }
+}
+
+
+
+
+
+
 
     // ====== LIST + COUNT with filters ======
     public List<Request> findPage(Integer userId, boolean onlyMine, boolean teamOfManager,
