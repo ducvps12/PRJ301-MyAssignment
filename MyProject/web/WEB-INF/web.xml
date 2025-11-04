@@ -341,6 +341,25 @@
 </servlet-mapping>
 
 
+<servlet>
+  <servlet-name>RequestDuplicateServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.request.RequestDuplicateServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>RequestDuplicateServlet</servlet-name>
+  <url-pattern>/request/duplicate</url-pattern>
+</servlet-mapping>
+
+<servlet>
+  <servlet-name>AdminDivisionsServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDivisionsServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminDivisionsServlet</servlet-name>
+  <url-pattern>/admin/divisions</url-pattern>
+</servlet-mapping>
+
+
 
   <!-- ===================== ERROR PAGES ===================== -->
 <!-- Error pages -->

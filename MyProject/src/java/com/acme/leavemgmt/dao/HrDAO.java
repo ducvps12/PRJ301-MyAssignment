@@ -3,43 +3,54 @@ package com.acme.leavemgmt.dao;
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.DBConnection;
 
+import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class HrDAO {
 
     public int countEmployees() throws SQLException {
-        String sql = "SELECT COUNT(*) FROM Users WHERE deleted_at IS NULL";
+        final String sql = "SELECT COUNT(*) FROM Users WHERE deleted_at IS NULL";
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
-            rs.next(); return rs.getInt(1);
+            rs.next();
+            return rs.getInt(1);
         }
     }
 
     public int countInterns() throws SQLException {
-        String sql = "SELECT COUNT(*) FROM Users WHERE role='INTERN' AND deleted_at IS NULL";
+        final String sql = "SELECT COUNT(*) FROM Users WHERE role='INTERN' AND deleted_at IS NULL";
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
-            rs.next(); return rs.getInt(1);
+            rs.next();
+            return rs.getInt(1);
         }
     }
 
     public int countContractEndingInDays(int days) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM Users WHERE contract_end IS NOT NULL " +
-                "AND DATEDIFF(DAY, GETDATE(), contract_end) BETWEEN 0 AND ?";
+        final String sql =
+                "SELECT COUNT(*) " +
+                "FROM Users " +
+                "WHERE deleted_at IS NULL " +
+                "  AND contract_end IS NOT NULL " +
+                "  AND DATEDIFF(DAY, GETDATE(), contract_end) BETWEEN 0 AND ?";
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, days);
-            try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 
     public int countOnLeaveToday() throws SQLException {
-        String sql = """
+        final String sql = """
             SELECT COUNT(DISTINCT r.user_id)
             FROM Requests r
             WHERE r.status='APPROVED'
@@ -48,19 +59,26 @@ public class HrDAO {
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
-            rs.next(); return rs.getInt(1);
+            rs.next();
+            return rs.getInt(1);
         }
     }
 
+    /** Danh sách "Nghỉ hôm nay" cho bảng ở dashboard HR */
     public List<OnLeaveRow> listOnLeaveToday(int limit) throws SQLException {
-        String sql = """
-            SELECT TOP (?) u.id, u.fullname, d.name AS division_name, r.from_date, r.to_date
+        final String sql = """
+            SELECT u.id,
+                   u.fullname,
+                   d.name AS division_name,
+                   r.from_date,
+                   r.to_date
             FROM Requests r
-            JOIN Users u ON u.id=r.user_id
-            LEFT JOIN Divisions d ON d.id=u.division_id
+            JOIN Users u ON u.id = r.user_id
+            LEFT JOIN Divisions d ON d.id = u.division_id
             WHERE r.status='APPROVED'
               AND CAST(GETDATE() AS DATE) BETWEEN r.from_date AND r.to_date
             ORDER BY u.fullname
+            OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY
         """;
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -72,8 +90,13 @@ public class HrDAO {
                     row.userId = rs.getInt("id");
                     row.fullname = rs.getString("fullname");
                     row.divisionName = rs.getString("division_name");
-                    row.from = rs.getDate("from_date").toLocalDate();
-                    row.to = rs.getDate("to_date").toLocalDate();
+
+                    // Lấy java.sql.Date (là subclass của java.util.Date) => hợp lệ cho fmt:formatDate
+                    java.sql.Date fd = rs.getDate("from_date");
+                    java.sql.Date td = rs.getDate("to_date");
+                    row.startDate = (fd != null ? new Date(fd.getTime()) : null);
+                    row.endDate   = (td != null ? new Date(td.getTime()) : null);
+
                     list.add(row);
                 }
                 return list;
@@ -85,25 +108,32 @@ public class HrDAO {
         StringBuilder sb = new StringBuilder();
         sb.append("""
             SELECT id, username, fullname, email, role, division_id, status, job_title, join_date, contract_end
-            FROM Users WHERE deleted_at IS NULL
+            FROM Users
+            WHERE deleted_at IS NULL
         """);
+
         List<Object> args = new ArrayList<>();
         if (q != null && !q.isBlank()) {
             sb.append(" AND (fullname LIKE ? OR username LIKE ? OR email LIKE ?) ");
-            args.add("%"+q+"%"); args.add("%"+q+"%"); args.add("%"+q+"%");
+            args.add("%" + q + "%");
+            args.add("%" + q + "%");
+            args.add("%" + q + "%");
         }
         if (role != null && !role.isBlank()) {
-            sb.append(" AND role = ? "); args.add(role);
+            sb.append(" AND role = ? ");
+            args.add(role);
         }
         if (divisionId != null) {
-            sb.append(" AND division_id = ? "); args.add(divisionId);
+            sb.append(" AND division_id = ? ");
+            args.add(divisionId);
         }
         sb.append(" ORDER BY fullname OFFSET ? ROWS FETCH NEXT ? ROWS ONLY ");
-        args.add((page-1)*pageSize); args.add(pageSize);
+        args.add((page - 1) * pageSize);
+        args.add(pageSize);
 
         try (Connection c = DBConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sb.toString())) {
-            for (int i=0;i<args.size();i++) ps.setObject(i+1, args.get(i));
+            for (int i = 0; i < args.size(); i++) ps.setObject(i + 1, args.get(i));
             try (ResultSet rs = ps.executeQuery()) {
                 List<User> list = new ArrayList<>();
                 while (rs.next()) {
@@ -116,8 +146,12 @@ public class HrDAO {
                     u.setDivisionId((Integer) rs.getObject("division_id"));
                     u.setStatus(rs.getString("status"));
                     u.setJobTitle(rs.getString("job_title"));
-                    Date jd = rs.getDate("join_date"); if (jd!=null) u.setJoinDate(jd.toLocalDate());
-                    Date ce = rs.getDate("contract_end"); if (ce!=null) u.setContractEnd(ce.toLocalDate());
+
+                    java.sql.Date jd = rs.getDate("join_date");
+                    java.sql.Date ce = rs.getDate("contract_end");
+                    if (jd != null) u.setJoinDate(jd.toLocalDate());
+                    if (ce != null) u.setContractEnd(ce.toLocalDate());
+
                     list.add(u);
                 }
                 return list;
@@ -126,7 +160,7 @@ public class HrDAO {
     }
 
     public User findUser(int id) throws SQLException {
-        String sql = """
+        final String sql = """
             SELECT id, username, fullname, email, role, division_id, status, job_title, join_date, contract_end, salary
             FROM Users WHERE id=?
         """;
@@ -144,8 +178,12 @@ public class HrDAO {
                 u.setDivisionId((Integer) rs.getObject("division_id"));
                 u.setStatus(rs.getString("status"));
                 u.setJobTitle(rs.getString("job_title"));
-                Date jd = rs.getDate("join_date"); if (jd!=null) u.setJoinDate(jd.toLocalDate());
-                Date ce = rs.getDate("contract_end"); if (ce!=null) u.setContractEnd(ce.toLocalDate());
+
+                java.sql.Date jd = rs.getDate("join_date");
+                java.sql.Date ce = rs.getDate("contract_end");
+                if (jd != null) u.setJoinDate(jd.toLocalDate());
+                if (ce != null) u.setContractEnd(ce.toLocalDate());
+
                 u.setSalary(rs.getBigDecimal("salary"));
                 return u;
             }
@@ -153,8 +191,9 @@ public class HrDAO {
     }
 
     public void updateUser(User u) throws SQLException {
-        String sql = """
-            UPDATE Users SET fullname=?, email=?, role=?, division_id=?,
+        final String sql = """
+            UPDATE Users
+            SET fullname=?, email=?, role=?, division_id=?,
                 status=?, job_title=?, join_date=?, contract_end=?, salary=?
             WHERE id=?
         """;
@@ -166,20 +205,32 @@ public class HrDAO {
             if (u.getDivisionId() == null) ps.setNull(4, Types.INTEGER); else ps.setInt(4, u.getDivisionId());
             ps.setString(5, u.getStatus());
             ps.setString(6, u.getJobTitle());
-            if (u.getJoinDate()==null) ps.setNull(7, Types.DATE); else ps.setDate(7, Date.valueOf(u.getJoinDate()));
-            if (u.getContractEnd()==null) ps.setNull(8, Types.DATE); else ps.setDate(8, Date.valueOf(u.getContractEnd()));
+            if (u.getJoinDate() == null) ps.setNull(7, Types.DATE); else ps.setDate(7, java.sql.Date.valueOf(u.getJoinDate()));
+            if (u.getContractEnd() == null) ps.setNull(8, Types.DATE); else ps.setDate(8, java.sql.Date.valueOf(u.getContractEnd()));
             ps.setBigDecimal(9, u.getSalary());
             ps.setInt(10, u.getId());
             ps.executeUpdate();
         }
     }
 
-    /* DTO nhỏ cho bảng "Nghỉ hôm nay" */
+    /* ================== DTO nhỏ cho bảng "Nghỉ hôm nay" ================== */
     public static class OnLeaveRow {
-        public int userId;
-        public String fullname;
-        public String divisionName;
-        public LocalDate from;
-        public LocalDate to;
+        private int userId;
+        private String fullname;
+        private String divisionName;
+        /** Dùng java.util.Date để JSP <fmt:formatDate> format được */
+        private Date startDate;
+        private Date endDate;
+
+        // -- getters/setters
+        public int getUserId() { return userId; }
+        public String getFullname() { return fullname; }
+        /** Alias để JSP dùng ${r.fullName} */
+        public String getFullName() { return fullname; }
+        public String getDivisionName() { return divisionName; }
+        public Date getStartDate() { return startDate; }
+        public Date getEndDate() { return endDate; }
+
+        // (giữ default visibility để HrDAO có thể set trực tiếp)
     }
 }

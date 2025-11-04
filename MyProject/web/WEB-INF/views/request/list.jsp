@@ -7,6 +7,11 @@
   <title>Danh sách đơn nghỉ phép</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light dark" />
+  
+  <!-- THEME BOOTSTRAP: set data-theme sớm từ localStorage (mặc định light) -->
+<%@ include file="/WEB-INF/views/common/_theme_bootstrap.jsp" %>
+
+
   <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/list.css" />
   <script defer src="${pageContext.request.contextPath}/assets/js/list.js"></script>
 </head>
@@ -305,6 +310,7 @@
 <div id="loading" class="loading" hidden>
   <div class="spinner"></div><span>Đang tải…</span>
 </div>
+<script src="${pageContext.request.contextPath}/assets/js/theme.js"></script>
 
 <%@ include file="/WEB-INF/views/common/_footer.jsp" %>
 </body>
