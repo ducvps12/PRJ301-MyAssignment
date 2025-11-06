@@ -326,6 +326,21 @@
     <servlet-name>AdminSettingsServlet</servlet-name>
     <url-pattern>/admin/settings</url-pattern>
   </servlet-mapping>
+<!-- User Home -->
+<servlet>
+  <servlet-name>UserHomeServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.account.UserHomeServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>UserHomeServlet</servlet-name>
+  <url-pattern>/user/home</url-pattern>
+  <!-- optional để chấp nhận /user/home/ có dấu / cuối -->
+  <url-pattern>/user/home/</url-pattern>
+</servlet-mapping>
+
+
+
 
  <servlet>
   <servlet-name>Activity</servlet-name>
@@ -336,6 +351,14 @@
   <servlet-name>Activity</servlet-name>
   <url-pattern>/activity</url-pattern>
 </servlet-mapping>
+
+
+
+
+
+
+
+
 
 
   <!-- Error pages (đảm bảo các JSP tồn tại đúng đường dẫn) -->
