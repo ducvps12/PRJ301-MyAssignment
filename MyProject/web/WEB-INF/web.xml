@@ -327,18 +327,16 @@
     <url-pattern>/admin/settings</url-pattern>
   </servlet-mapping>
 
-  <servlet>
-    <servlet-name>ActivityServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.ActivityServlet</servlet-class>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>ActivityServlet</servlet-name>
-    <url-pattern>/activity</url-pattern>
-  </servlet-mapping>
-  <servlet-mapping>
-    <servlet-name>ActivityServlet</servlet-name>
-    <url-pattern>/admin/activity</url-pattern>
-  </servlet-mapping>
+ <servlet>
+  <servlet-name>Activity</servlet-name>
+  <servlet-class>com.acme.leavemgmt.web.ActivityServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>Activity</servlet-name>
+  <url-pattern>/activity</url-pattern>
+</servlet-mapping>
+
 
   <!-- Error pages (đảm bảo các JSP tồn tại đúng đường dẫn) -->
   <error-page>

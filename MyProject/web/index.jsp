@@ -25,7 +25,8 @@
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
  <!-- CSS đã tách riêng -->
  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/index.css?v=1"><!-- comment -->
- 
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/js/index.js?v=1"><!-- comment -->
+
       
     </head>
     <body class="fade-in">
@@ -40,6 +41,50 @@
                     </div>
                 </div>
                 <a class="btn btn-outline-primary btn-sm rounded-pill ms-2" href="${pageContext.request.contextPath}/request/list">Vào Requests</a>
+            </div>
+        </section>
+
+        <!-- ============== PARTNERS / LOGO STRIP ============== -->
+        <section class="py-5">
+            <div class="container">
+                <div class="text-center mb-4">
+                    <h2 class="h4 fw-bold mb-2">Được tin tưởng bởi các đội nhóm</h2>
+                    <p class="mini-muted mb-0">Các logo minh họa — chỉ nhằm mục đích demo UI</p>
+                </div>
+                <div class="logo-strip">
+                    <img loading="lazy" alt="Microsoft" data-src="https://cdn.simpleicons.org/microsoft/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Google" data-src="https://cdn.simpleicons.org/google/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="GitHub" data-src="https://cdn.simpleicons.org/github/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Slack" data-src="https://cdn.simpleicons.org/slack/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Atlassian" data-src="https://cdn.simpleicons.org/atlassian/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Notion" data-src="https://cdn.simpleicons.org/notion/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Trello" data-src="https://cdn.simpleicons.org/trello/60a5fa" width="120" height="32">
+                    <img loading="lazy" alt="Azure" data-src="https://cdn.simpleicons.org/microsoftazure/60a5fa" width="120" height="32">
+                </div>
+            </div>
+        </section>
+
+        <!-- ============== IMAGE GALLERY ============== -->
+        <section id="gallery" class="py-5" style="background: linear-gradient(135deg, rgba(var(--card-rgb), .25), transparent);">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="h3 fw-bold mb-2">Thư viện hình ảnh</h2>
+                    <p class="mini-muted">Văn phòng · team · hoạt động nhân sự · minh hoạ quy trình</p>
+                </div>
+                <div class="gallery-grid">
+                    <figure class="gallery-item hover"><img alt="office" data-src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="team" data-src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="meeting" data-src="https://images.unsplash.com/photo-1529336953121-a9d1b3a5bc8b?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="calendar" data-src="https://images.unsplash.com/photo-1518085250887-2f903c200fee?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="hr" data-src="https://images.unsplash.com/photo-1552581234-26160f608093?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="laptop" data-src="https://images.unsplash.com/photo-1518779578993-ec3579fee39f?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="approval" data-src="https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="report" data-src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="workspace" data-src="https://images.unsplash.com/photo-1487015307662-6ce6210680f1?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="whiteboard" data-src="https://images.unsplash.com/photo-1557800636-894a64c1696f?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="dashboard" data-src="https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&w=1200&q=60"></figure>
+                    <figure class="gallery-item hover"><img alt="analytics" data-src="https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&w=1200&q=60"></figure>
+                </div>
             </div>
         </section>
 

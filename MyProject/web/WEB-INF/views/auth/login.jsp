@@ -1,3 +1,4 @@
+
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
 <jsp:useBean id="now" class="java.util.Date" />
@@ -67,9 +68,12 @@
 
           <div class="input-wrap pw">
             <label for="password">Mật khẩu</label>
-            <input id="password" name="password" class="input" type="password"
-                   autocomplete="current-password" required aria-required="true"
-                   aria-describedby="formHelp" />
+            <div class="pw-row">
+              <input id="password" name="password" class="input" type="password"
+                     autocomplete="current-password" required aria-required="true"
+                     aria-describedby="formHelp" />
+              <button type="button" class="pw-toggle" id="btnTogglePw" aria-label="Ẩn/hiện mật khẩu">👁️</button>
+            </div>
           </div>
 
           <div class="row">
@@ -105,7 +109,7 @@
     </div><!-- /right-col -->
   </div><!-- /wrap -->
 
-  <!-- Khối CSS nhỏ gọn cho divider + nút Google (nếu bạn chưa thêm trong login.css) -->
+  <!-- CSS nhỏ gọn bổ sung cho divider, Google và toggle mật khẩu -->
   <style>
     .or{display:flex;align-items:center;gap:8px;margin:16px 0;color:var(--m,#6b7280)}
     .or span{flex:1;height:1px;background:var(--b,#e5e7eb)}
@@ -114,6 +118,9 @@
       border:1px solid #dadce0;border-radius:8px;padding:10px 14px;background:#fff;color:#202124;
       font-weight:600;text-decoration:none}
     .btn.google:hover{background:#f8f9fa}
+    .pw-row{display:flex;gap:8px;align-items:center}
+    .pw-toggle{min-width:44px;height:44px;border:1px solid var(--b,#e5e7eb);border-radius:8px;background:transparent;cursor:pointer}
+    .pw-toggle:focus{outline:2px solid #2563eb;outline-offset:2px}
   </style>
 
   <script>
@@ -130,6 +137,7 @@
         const isPw = pass.getAttribute('type') === 'password';
         pass.setAttribute('type', isPw ? 'text' : 'password');
         btnToggle.textContent = isPw ? '🙈' : '👁️';
+        btnToggle.setAttribute('aria-pressed', String(isPw));
       });
 
       // Client validation + chặn spam click

@@ -1,9 +1,11 @@
-<%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ include file="/WEB-INF/views/common/_taglibs.jsp"%>
 
 <%@ include file="/WEB-INF/views/common/_admin_header.jsp" %>
 <%@ include file="/WEB-INF/views/common/_admin_sidebar.jsp" %>
+
 <c:set var="cp" value="${pageContext.request.contextPath}" />
+
 
 <!-- Flash Messages -->
 <c:if test="${not empty sessionScope.flash_success}">

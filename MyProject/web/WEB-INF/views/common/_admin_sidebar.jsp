@@ -1,12 +1,14 @@
-<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ taglib prefix="c"  uri="http://java.sun.com/jsp/jstl/core" %>
-<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+<%-- _admin_sidebar.jsp (FINAL)
+  - KHÔNG khai báo taglib ở partial.
+  - Trang ngoài phải include: /WEB-INF/views/common/_taglibs.jsp (jakarta.tags.*)
+--%>
 
-<c:set var="ctx" value="${pageContext.request.contextPath}" />
+<%-- đảm bảo có ctx; nếu trang ngoài đã set thì giữ nguyên --%>
+<c:set var="ctx" value="${empty ctx ? pageContext.request.contextPath : ctx}" />
 <c:set var="u"   value="${sessionScope.currentUser}" />
 <c:set var="r"   value="${u != null ? u.role : ''}" />
 
-<!-- PHÂN QUYỀN MENU -->
+<%-- PHÂN QUYỀN MENU --%>
 <c:set var="canDashboard"
        value="${r eq 'ADMIN' or r eq 'SYS_ADMIN' or r eq 'DIV_LEADER' or r eq 'TEAM_LEAD' or r eq 'HR_ADMIN' or r eq 'DEPT_MANAGER'}" />
 <c:set var="canRequests"  value="${r ne 'TERMINATED' and r ne 'SUSPENDED' and r ne ''}" />
@@ -40,8 +42,6 @@
   .sb .divider{height:1px;background:var(--bd);margin:10px 0}
   .sb .badge{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:#2a3a6a;margin-left:8px;text-align:center;font-size:12px}
   .sb .mb8{margin-bottom:8px}
-
-  /* Mini mode + Mobile */
   .sb.mini{width:72px}
   .sb.mini .brand .meta, .sb.mini .sec, .sb.mini .group{display:none}
   .sb.mini .brand{justify-content:center}
@@ -64,7 +64,6 @@
   </div>
 
   <nav role="navigation">
-    <!-- 0. Tổng quan -->
     <c:if test="${canDashboard}">
       <div class="sec">Tổng quan</div>
       <a class="mb8" href="${ctx}/admin">Dashboard
@@ -78,7 +77,6 @@
       <div class="divider"></div>
     </c:if>
 
-    <!-- 1. Đơn nghỉ phép -->
     <c:if test="${canRequests}">
       <details data-key="sb-requests">
         <summary>Đơn nghỉ phép</summary>
@@ -100,7 +98,6 @@
       </details>
     </c:if>
 
-    <!-- 2. Tổ chức & Nhân sự -->
     <c:if test="${canHR}">
       <details data-key="sb-org">
         <summary>Tổ chức & nhân sự</summary>
@@ -126,7 +123,6 @@
       </details>
     </c:if>
 
-    <!-- 3. Vận hành hệ thống -->
     <c:if test="${canUsers or canSettings}">
       <details data-key="sb-ops">
         <summary>Vận hành hệ thống</summary>
@@ -143,7 +139,6 @@
       </details>
     </c:if>
 
-    <!-- 4. Giám sát & Báo cáo -->
     <details data-key="sb-audit">
       <summary>Giám sát & báo cáo</summary>
       <div class="group">
@@ -159,7 +154,6 @@
 
 <script>
 (function(){
-  // link đang mở + auto mở nhóm chứa nó
   var here = location.pathname + location.search;
   var groupsToOpen = new Set();
   document.querySelectorAll('.sb a').forEach(function(a){
@@ -171,7 +165,6 @@
   });
   groupsToOpen.forEach(function(d){ d.open = true; });
 
-  // lưu trạng thái mở/đóng cho từng nhóm
   var boxes = document.querySelectorAll('.sb details[data-key]');
   boxes.forEach(function(d){
     var k = d.getAttribute('data-key');
@@ -181,7 +174,6 @@
     d.addEventListener('toggle', function(){ localStorage.setItem(k, d.open ? 'open' : 'close'); });
   });
 
-  // Expand/Collapse all
   var btnEx = document.getElementById('btnExpandAll');
   function refreshBtnEx(){
     btnEx.textContent = Array.from(boxes).some(function(d){return !d.open;}) ? 'Expand' : 'Collapse';
@@ -197,7 +189,6 @@
   });
   refreshBtnEx();
 
-  // Mini mode
   var sb = document.getElementById('sidebar');
   var btnMini = document.getElementById('btnMini');
   var miniKey = 'sb.mini';
@@ -209,10 +200,8 @@
     btnMini.textContent = on ? 'Full' : 'Mini';
   });
 
-  // Hỗ trợ mobile: nút ☰ ở header gọi .sidebar.open (đã gắn trong header)
   window.toggleSidebar = function(){ sb.classList.toggle('open'); };
 
-  // A11y: phím [ ] để di chuyển giữa sections, Enter để toggle
   document.addEventListener('keydown', function(e){
     if(e.key === '[' || e.key === ']'){
       var list = Array.from(document.querySelectorAll('.sb summary'));
