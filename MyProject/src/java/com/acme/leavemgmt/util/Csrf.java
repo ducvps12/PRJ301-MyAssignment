@@ -152,5 +152,9 @@ public final class Csrf {
         return diff == 0;
     }
 
+    public static boolean validate(HttpServletRequest req) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
     private Csrf() {}
 }

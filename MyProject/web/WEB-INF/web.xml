@@ -12,7 +12,7 @@
     <welcome-file>index.jsp</welcome-file>
   </welcome-file-list>
 
-  <!-- ===== Health check (tuỳ chọn) ===== -->
+  <!-- ===== (Optional) Health check ===== -->
   <servlet>
     <servlet-name>Hello</servlet-name>
     <servlet-class>com.acme.leavemgmt.web.HelloServlet</servlet-class>
@@ -24,7 +24,6 @@
   </servlet-mapping>
 
   <!-- ===================== SERVLETS ===================== -->
-
   <!-- Auth / Login -->
   <servlet>
     <servlet-name>AuthServlet</servlet-name>
@@ -63,7 +62,6 @@
     <url-pattern>/request/approve</url-pattern>
   </servlet-mapping>
 
- 
   <servlet>
     <servlet-name>RequestCancelServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.RequestCancelServlet</servlet-class>
@@ -81,52 +79,114 @@
     <servlet-name>AgendaServlet</servlet-name>
     <url-pattern>/request/agenda</url-pattern>
   </servlet-mapping>
-<!-- Admin area -->
-<servlet>
-  <servlet-name>AdminDashboardServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDashboardServlet</servlet-class>
-  <load-on-startup>2</load-on-startup>
-</servlet>
 
-<servlet-mapping>
-  <servlet-name>AdminDashboardServlet</servlet-name>
-  <!-- Quan trọng: dùng prefix mapping để bắt cả /admin, /admin/, /admin/... -->
-  <url-pattern>/admin/*</url-pattern>
-</servlet-mapping>
+  <!-- Admin area -->
+  <servlet>
+    <servlet-name>AdminDashboardServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDashboardServlet</servlet-class>
+    <load-on-startup>2</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminDashboardServlet</servlet-name>
+    <!-- prefix mapping để nhận /admin, /admin/, /admin/... -->
+    <url-pattern>/admin/*</url-pattern>
+  </servlet-mapping>
 
-<!-- ✅ Admin: USER DETAIL -->
-<servlet>
+  <!-- Admin: Users (list/create/detail/edit/toggle/resetpw) -->
+  <servlet>
+    <servlet-name>AdminUsersServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminUsersServlet</servlet-name>
+    <url-pattern>/admin/users</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
+    <servlet-name>AdminUserCreateServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserCreateServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminUserCreateServlet</servlet-name>
+    <url-pattern>/admin/users/create</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
     <servlet-name>AdminUserDetailServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserDetailServlet</servlet-class>
-</servlet>
-<servlet-mapping>
+  </servlet>
+  <servlet-mapping>
     <servlet-name>AdminUserDetailServlet</servlet-name>
     <url-pattern>/admin/users/detail</url-pattern>
-</servlet-mapping>
+  </servlet-mapping>
 
-
-<!-- ✅ Admin: USER DETAIL -->
-<servlet>
+  <servlet>
     <servlet-name>AdminUserEditServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserEditServlet</servlet-class>
-</servlet>
-<servlet-mapping>
+  </servlet>
+  <servlet-mapping>
     <servlet-name>AdminUserEditServlet</servlet-name>
     <url-pattern>/admin/users/edit</url-pattern>
-</servlet-mapping>
+  </servlet-mapping>
 
-<!-- ✅ Admin: rs -->
-<servlet>
+  <servlet>
+    <servlet-name>AdminUserToggleServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserToggleServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminUserToggleServlet</servlet-name>
+    <url-pattern>/admin/users/toggle</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
     <servlet-name>AdminUserResetPwServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserResetPwServlet</servlet-class>
-</servlet>
-<servlet-mapping>
+  </servlet>
+  <servlet-mapping>
     <servlet-name>AdminUserResetPwServlet</servlet-name>
-    <url-pattern>/admin/users/rs</url-pattern>
-</servlet-mapping>
+    <url-pattern>/admin/users/resetpw</url-pattern>
+  </servlet-mapping>
 
+  <!-- Admin: HR console -->
+  <servlet>
+    <servlet-name>AdminHrDashboardServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrDashboardServlet</servlet-class>
+    <load-on-startup>1</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminHrDashboardServlet</servlet-name>
+    <url-pattern>/admin/hr</url-pattern>
+  </servlet-mapping>
 
+  <servlet>
+    <servlet-name>AdminHrListServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrListServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminHrListServlet</servlet-name>
+    <url-pattern>/admin/hr/list</url-pattern>
+  </servlet-mapping>
 
+  <servlet>
+    <servlet-name>AdminHrEditServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrEditServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminHrEditServlet</servlet-name>
+    <url-pattern>/admin/hr/edit</url-pattern>
+  </servlet-mapping>
+
+  <!-- Admin: Divisions -->
+  <servlet>
+    <servlet-name>AdminDivisionsServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDivisionsServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminDivisionsServlet</servlet-name>
+    <url-pattern>/admin/divisions</url-pattern>
+  </servlet-mapping>
+
+  <!-- Division dashboard (1 mapping duy nhất) -->
   <servlet>
     <servlet-name>DivDashboardServlet</servlet-name>
     <servlet-class>com.acme.leavemgmt.servlet.admin.DivDashboardServlet</servlet-class>
@@ -136,60 +196,70 @@
     <url-pattern>/admin/div</url-pattern>
   </servlet-mapping>
 
-<!-- Admin Users List -->
-<!-- LIST -->
+  <!-- Request detail -->
+  <servlet>
+    <servlet-name>RequestDetailServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.RequestDetailServlet</servlet-class>
+    <load-on-startup>1</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>RequestDetailServlet</servlet-name>
+    <url-pattern>/request/detail</url-pattern>
+  </servlet-mapping>
+  <servlet-mapping>
+    <servlet-name>RequestDetailServlet</servlet-name>
+    <url-pattern>/request/detail/*</url-pattern>
+  </servlet-mapping>
+
+  <!-- Request duplicate -->
+  <servlet>
+    <servlet-name>RequestDuplicateServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.request.RequestDuplicateServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>RequestDuplicateServlet</servlet-name>
+    <url-pattern>/request/duplicate</url-pattern>
+  </servlet-mapping>
+
+  <!-- Account -->
+  <servlet>
+    <servlet-name>ChangePasswordServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.account.ChangePasswordServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>ChangePasswordServlet</servlet-name>
+    <url-pattern>/account/change-password</url-pattern>
+  </servlet-mapping>
+
+<!-- web.xml -->
 <servlet>
-    <servlet-name>AdminUsersServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUsersServlet</servlet-class>
+  <servlet-name>ForgotPasswordServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.account.ForgotPasswordServlet</servlet-class>
 </servlet>
 <servlet-mapping>
-    <servlet-name>AdminUsersServlet</servlet-name>
-    <url-pattern>/admin/users</url-pattern>
-</servlet-mapping>
-
-<!-- CREATE -->
-<servlet>
-    <servlet-name>AdminUserCreateServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserCreateServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-    <servlet-name>AdminUserCreateServlet</servlet-name>
-    <url-pattern>/admin/users/create</url-pattern>
-</servlet-mapping>
-
-
-<!-- Admin User Detail -->
-<servlet>
-    <servlet-name>AdminUserDetailServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserDetailServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-    <servlet-name>AdminUserDetailServlet</servlet-name>
-    <!-- dùng /admin/user/detail (singular) để không bị trùng với /admin/users/... -->
-    <url-pattern>/admin/user/detail</url-pattern>
-</servlet-mapping>
-
-
-<!-- (nếu có) Toggle & Reset PW cũng cần mapping -->
-<servlet>
-  <servlet-name>AdminUserToggleServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserToggleServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminUserToggleServlet</servlet-name>
-  <url-pattern>/admin/users/toggle</url-pattern>
-</servlet-mapping>
-
-<servlet>
-  <servlet-name>AdminUserResetPwServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminUserResetPwServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminUserResetPwServlet</servlet-name>
-  <url-pattern>/admin/users/resetpw</url-pattern>
+  <servlet-name>ForgotPasswordServlet</servlet-name>
+  <url-pattern>/forgot</url-pattern>
 </servlet-mapping>
 
 
+
+<!-- Ví dụ trong AuthFilter: exclude các path công khai -->
+<init-param>
+  <param-name>excludePaths</param-name>
+  <param-value>/login,/logout,/forgot,/assets/</param-value>
+</init-param>
+
+
+   <!-- audit -->
+  <servlet>
+  <servlet-name>AdminAuditServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminAuditServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminAuditServlet</servlet-name>
+  <url-pattern>/admin/audit</url-pattern>
+</servlet-mapping>
 
   <!-- Profile & Logout -->
   <servlet>
@@ -211,8 +281,6 @@
   </servlet-mapping>
 
   <!-- ===================== FILTERS ===================== -->
-
-  <!-- AuthFilter: bảo vệ chung / tạo tiện ích context -->
   <filter>
     <filter-name>AuthFilter</filter-name>
     <filter-class>com.acme.leavemgmt.filter.AuthFilter</filter-class>
@@ -222,169 +290,79 @@
     <url-pattern>/*</url-pattern>
   </filter-mapping>
 
-  <!-- RoleFilter: kiểm tra quyền cho khu vực admin & duyệt -->
- <filter>
-  <filter-name>RoleFilter</filter-name>
-  <filter-class>com.acme.leavemgmt.filter.RoleFilter</filter-class>
-</filter>
+  <filter>
+    <filter-name>RoleFilter</filter-name>
+    <filter-class>com.acme.leavemgmt.filter.RoleFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/admin/*</url-pattern>
+  </filter-mapping>
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/request/approve</url-pattern>
+  </filter-mapping>
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/request/approve/*</url-pattern>
+  </filter-mapping>
+  <!-- (Nếu UI dùng /approvals thì bật 2 mapping dưới; nếu không dùng, có thể xóa) -->
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/approvals</url-pattern>
+  </filter-mapping>
+  <filter-mapping>
+    <filter-name>RoleFilter</filter-name>
+    <url-pattern>/approvals/*</url-pattern>
+  </filter-mapping>
 
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/admin/*</url-pattern>
-</filter-mapping>
+  <!-- ===================== SETTINGS & ERROR PAGES ===================== -->
+  <servlet>
+    <servlet-name>AdminSettingsServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSettingsServlet</servlet-class>
+    <load-on-startup>1</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>AdminSettingsServlet</servlet-name>
+    <url-pattern>/admin/settings</url-pattern>
+  </servlet-mapping>
 
-<!-- Trang duyệt + trang danh sách phê duyệt -->
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/request/approve</url-pattern>
-</filter-mapping>
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/request/approve/*</url-pattern>
-</filter-mapping>
+  <servlet>
+    <servlet-name>ActivityServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.ActivityServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>ActivityServlet</servlet-name>
+    <url-pattern>/activity</url-pattern>
+  </servlet-mapping>
+  <servlet-mapping>
+    <servlet-name>ActivityServlet</servlet-name>
+    <url-pattern>/admin/activity</url-pattern>
+  </servlet-mapping>
 
-<!-- Nếu menu bạn dùng path “/approvals” (UI đang ghi Approvals) thì thêm: -->
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/approvals</url-pattern>
-</filter-mapping>
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/approvals/*</url-pattern>
-</filter-mapping>
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/approvals</url-pattern>
-</filter-mapping>
-<filter-mapping>
-  <filter-name>RoleFilter</filter-name>
-  <url-pattern>/approvals/*</url-pattern>
-</filter-mapping>
+  <!-- Error pages (đảm bảo các JSP tồn tại đúng đường dẫn) -->
+  <error-page>
+    <error-code>403</error-code>
+    <location>/WEB-INF/views/errors/403.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>404</error-code>
+    <location>/WEB-INF/views/errors/404.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>500</error-code>
+    <location>/WEB-INF/views/errors/500.jsp</location>
+  </error-page>
+  <error-page>
+    <exception-type>java.lang.Throwable</exception-type>
+    <location>/WEB-INF/views/errors/500.jsp</location>
+  </error-page>
 
-
-<!-- Servlet -->
-<servlet>
-  <servlet-name>RequestDetailServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.RequestDetailServlet</servlet-class>
-  <load-on-startup>1</load-on-startup>
-</servlet>
-
-<!-- Maps -->
-<servlet-mapping>
-  <servlet-name>RequestDetailServlet</servlet-name>
-  <url-pattern>/request/detail</url-pattern>
-</servlet-mapping>
-<servlet-mapping>
-  <servlet-name>RequestDetailServlet</servlet-name>
-  <url-pattern>/request/detail/*</url-pattern>
-</servlet-mapping>
-
-
-
-<servlet>
-  <servlet-name>AdminSettingsServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSettingsServlet</servlet-class>
-  <load-on-startup>1</load-on-startup>
-</servlet>
-
-<!-- Maps -->
-<servlet-mapping>
-  <servlet-name>AdminSettingsServlet</servlet-name>
-  <url-pattern>/admin/settings</url-pattern>
-</servlet-mapping>
-
-
-
-<servlet>
-  <servlet-name>ActivityServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.ActivityServlet</servlet-class>
-</servlet>
-
-<servlet-mapping>
-  <servlet-name>ActivityServlet</servlet-name>
-  <url-pattern>/activity</url-pattern>
-</servlet-mapping>
-
-<servlet-mapping>
-  <servlet-name>ActivityServlet</servlet-name>
-  <url-pattern>/admin/activity</url-pattern>
-</servlet-mapping>
-<!-- HR Dashboard -->
-<servlet>
-  <servlet-name>AdminHrDashboardServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrDashboardServlet</servlet-class>
-  <load-on-startup>1</load-on-startup>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminHrDashboardServlet</servlet-name>
-  <url-pattern>/admin/hr</url-pattern>
-</servlet-mapping>
-
-<!-- HR List -->
-<servlet>
-  <servlet-name>AdminHrListServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrListServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminHrListServlet</servlet-name>
-  <url-pattern>/admin/hr/list</url-pattern>
-</servlet-mapping>
-
-<!-- HR Edit -->
-<servlet>
-  <servlet-name>AdminHrEditServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminHrEditServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminHrEditServlet</servlet-name>
-  <url-pattern>/admin/hr/edit</url-pattern>
-</servlet-mapping>
-
-
-<servlet>
-  <servlet-name>RequestDuplicateServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.request.RequestDuplicateServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>RequestDuplicateServlet</servlet-name>
-  <url-pattern>/request/duplicate</url-pattern>
-</servlet-mapping>
-
-<servlet>
-  <servlet-name>AdminDivisionsServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminDivisionsServlet</servlet-class>
-</servlet>
-<servlet-mapping>
-  <servlet-name>AdminDivisionsServlet</servlet-name>
-  <url-pattern>/admin/divisions</url-pattern>
-</servlet-mapping>
-
-
-
-  <!-- ===================== ERROR PAGES ===================== -->
-<!-- Error pages -->
-<error-page>
-  <error-code>403</error-code>
-  <location>/WEB-INF/views/errors/403.jsp</location>
-</error-page>
-<error-page>
-  <error-code>404</error-code>
-  <location>/WEB-INF/views/errors/404.jsp</location>
-</error-page>
-<error-page>
-  <error-code>500</error-code>
-  <location>/WEB-INF/views/errors/500.jsp</location>
-</error-page>
-<error-page>
-  <exception-type>java.lang.Throwable</exception-type>
-  <location>/WEB-INF/views/errors/500.jsp</location>
-</error-page>
-
-<!-- Bật/tắt panel debug -->
-<context-param>
-  <param-name>app.mode</param-name>
-  <param-value>dev</param-value>  <!-- đổi 'prod' khi lên production -->
-</context-param>
+  <!-- App mode -->
+  <context-param>
+    <param-name>app.mode</param-name>
+    <param-value>dev</param-value>
+  </context-param>
 
   <!-- ===================== SESSION ===================== -->
   <session-config>

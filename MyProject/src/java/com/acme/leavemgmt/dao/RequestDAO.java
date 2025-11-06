@@ -1470,64 +1470,105 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
 
 // Trong RequestDAO
 
-    public boolean updateStatusIfPending(int id, String newStatus, int approverId, String note) throws SQLException {
-        String sql
-                = "UPDATE dbo.Requests "
-                + "SET status = ?, approved_by = ?, approve_note = ?, approved_at = GETDATE() "
-                + "WHERE id = ? AND status = 'PENDING'";
-
-        try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, newStatus);
-            ps.setInt(2, approverId);
-            ps.setString(3, note);
-            ps.setInt(4, id);
-            int rows = ps.executeUpdate();
-            return rows > 0;
-        }
-    }
-
-    public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
-        if (me == null) {
-            return false;
-        }
-        String role = me.getRole() == null ? "" : me.getRole().toUpperCase();
-
-        // ADMIN: duyệt tất
-        if ("ADMIN".equals(role)) {
-            return true;
-        }
-
-        // TEAM_LEAD: chỉ duyệt khi mình là manager trực tiếp của đơn
-        if ("TEAM_LEAD".equals(role)) {
-            String sql = "SELECT 1 FROM dbo.Requests WHERE id = ? AND manager_id = ?";
-            try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-                ps.setInt(1, reqObj.getId());
-                ps.setInt(2, me.getId());
-                try (ResultSet rs = ps.executeQuery()) {
-                    return rs.next();
+  public boolean updateStatusIfPending(int id, String newStatus, int actorId, String note) throws SQLException {
+    try (Connection cn = getConnection()) {
+        switch (newStatus == null ? "" : newStatus.toUpperCase()) {
+            case "APPROVED": {
+                String sql = """
+                    UPDATE dbo.Requests
+                    SET status = 'APPROVED',
+                        approved_by = ?, 
+                        approved_at = SYSDATETIME(),
+                        approve_note = ?,
+                        updated_at = SYSDATETIME()
+                    WHERE id = ? AND UPPER(status) = 'PENDING'
+                """;
+                try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                    ps.setInt(1, actorId);
+                    ps.setString(2, safeNote(note));
+                    ps.setInt(3, id);
+                    return ps.executeUpdate() > 0;
                 }
             }
-        }
-
-        // DIV_LEADER: duyệt khi nhân viên thuộc cùng department với mình
-        if ("DIV_LEADER".equals(role)) {
-            String sql
-                    = "SELECT 1 "
-                    + "FROM dbo.Requests r "
-                    + "JOIN dbo.Users u ON u.id = r.employee_id "
-                    + // nếu bạn dùng created_by thì thay ở đây
-                    "WHERE r.id = ? AND u.department = ?";
-            try (Connection cn = getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-                ps.setInt(1, reqObj.getId());
-                ps.setString(2, me.getDepartment());   // ví dụ 'IT', 'QA', 'SALE'
-                try (ResultSet rs = ps.executeQuery()) {
-                    return rs.next();
+            case "REJECTED":
+            case "CANCELLED": {
+                String sql = """
+                    UPDATE dbo.Requests
+                    SET status = ?,
+                        processed_by = ?,              -- ✅ ghi đúng cột này
+                        manager_note = CASE
+                            WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
+                            WHEN manager_note IS NULL OR manager_note = '' THEN ?
+                            ELSE CONCAT(manager_note, CHAR(10), ?)
+                        END,
+                        updated_at = SYSDATETIME()
+                    WHERE id = ? AND UPPER(status) IN ('PENDING','INPROGRESS')
+                """;
+                try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                    ps.setString(1, newStatus);
+                    ps.setInt(2, actorId);
+                    String n = safeNote(note);
+                    ps.setString(3, n);
+                    ps.setString(4, n);
+                    ps.setString(5, n);
+                    ps.setString(6, n);
+                    ps.setInt(7, id);
+                    return ps.executeUpdate() > 0;
                 }
             }
+            default:
+                return false;
         }
-
-        return false;
     }
+}
+
+   public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
+    if (me == null || reqObj == null) return false;
+
+    final String role = me.getRole() == null ? "" : me.getRole().toUpperCase();
+    final int requestId = reqObj.getId();
+
+    // Nhóm “duyệt tất”
+    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role) || "HR_ADMIN".equals(role)) {
+        return true;
+    }
+
+    // Chốt cột đúng theo DB hiện tại: Requests.user_id
+    final String BASE_JOIN = """
+        FROM dbo.Requests r
+        JOIN dbo.Users    u ON u.id = r.user_id
+        WHERE r.id = ?
+        """;
+
+    try (Connection cn = getConnection()) {
+        switch (role) {
+            case "TEAM_LEAD": {
+                // TEAM_LEAD chỉ duyệt khi là manager trực tiếp của nhân viên tạo đơn
+                final String sql = "SELECT 1 " + BASE_JOIN + " AND u.manager_id = ?";
+                try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                    ps.setInt(1, requestId);
+                    ps.setInt(2, me.getId());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        return rs.next();
+                    }
+                }
+            }
+            case "DIV_LEADER": {
+                // DIV_LEADER duyệt khi nhân viên cùng department với mình
+                final String sql = "SELECT 1 " + BASE_JOIN + " AND u.department = ?";
+                try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                    ps.setInt(1, requestId);
+                    ps.setString(2, me.getDepartment());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        return rs.next();
+                    }
+                }
+            }
+            default:
+                return false;
+        }
+    }
+}
 
     // ĐẾM nhân sự active theo phòng ban (Users.status = 1)
     public int countHeadcountActiveByDept(String dept) throws SQLException {
@@ -2000,6 +2041,37 @@ public List<Request> dedupe(List<Request> raw) {
 
     return 0;
 }
+
+  // Tùy DB: approve_note nvarchar(500), manager_note nvarchar(1000)
+private static final int DEFAULT_NOTE_MAX = 1000;
+
+/** Chuẩn hoá ghi chú: trim, bỏ control char (trừ \n \t), chuẩn hóa \n, cắt độ dài, rỗng -> null */
+private String safeNote(String note) {
+    return safeNote(note, DEFAULT_NOTE_MAX);
+}
+
+/** Bản có tham số độ dài tối đa */
+private String safeNote(String note, int maxLen) {
+    if (note == null) return null;
+
+    // Chuẩn hóa xuống dòng về \n, giữ tab
+    String n = note.replace("\r\n", "\n")
+                   .replace('\r', '\n');
+
+    // Loại control chars (giữ lại \n và \t)
+    n = n.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "");
+
+    // Trim 2 đầu
+    n = n.trim();
+    if (n.isEmpty()) return null;
+
+    // Cắt độ dài an toàn
+    if (maxLen > 0 && n.length() > maxLen) {
+        n = n.substring(0, maxLen);
+    }
+    return n;
+}
+
 
 
 

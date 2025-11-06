@@ -30,9 +30,9 @@ public class AuthServlet extends HttpServlet {
             return;
         }
 
-        // Đã đăng nhập -> về list
+        // Đã đăng nhập -> về home
         if (s != null && s.getAttribute("currentUser") != null) {
-            resp.sendRedirect(req.getContextPath() + "/request/list");
+            resp.sendRedirect(req.getContextPath() + "/user/home");
             return;
         }
 

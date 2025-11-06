@@ -1,269 +1,239 @@
-// com.acme.leavemgmt.dao.ActivityDAO
 package com.acme.leavemgmt.dao;
 
 import com.acme.leavemgmt.model.Activity;
 import com.acme.leavemgmt.util.DBConnection;
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.io.PrintWriter;
 import java.sql.*;
-import java.util.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 /** DAO cho bảng dbo.User_Activity */
 public class ActivityDAO {
 
-    // bảng trong DB
-    private static final String TBL = "[dbo].[User_Activity]";
+  private static final String TBL = "[dbo].[User_Activity]";
 
-    /* =========================================================
-       1. Kiểu trả về phân trang cho JSP
-       ========================================================= */
-    public static class Page<T> {
-        // bạn đang forward attribute tên "pg" -> JSP gọi ${pg.xxx}
-        private final List<T> items;
-        private final int total;
-        private final int page;
-        private final int size;
+  /* ========================= SEARCH ========================= */
+  public Page<Activity> search(Integer userId, String action, String q,
+                               LocalDate from, LocalDate to,
+                               int page, int size) {
+    final int p = Math.max(1, page);
+    final int s = Math.max(1, size);
 
-        public Page(List<T> items, int total, int page, int size) {
-            this.items = items;
-            this.total = total;
-            this.page = page;
-            this.size = size;
-        }
+    StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+    List<Object> params = new ArrayList<>();
 
-        // ====== các getter để EL đọc được ======
-        public List<T> getItems() {
-            return items;
-        }
-
-        public int getTotal() {
-            return total;
-        }
-
-        public int getPage() {
-            return page;
-        }
-
-        public int getSize() {
-            return size;
-        }
-
-        // tổng số trang
-        public int getTotalPages() {
-            if (size <= 0) return 1;
-            return (int) Math.ceil((double) total / (double) size);
-        }
-
-        public boolean isHasNext() {
-            return page < getTotalPages();
-        }
-
-        public boolean isHasPrev() {
-            return page > 1;
-        }
+    if (userId != null) { where.append(" AND ua.user_id = ? "); params.add(userId); }
+    if (action != null && !action.trim().isEmpty()) { where.append(" AND ua.action = ? "); params.add(action.trim()); }
+    if (q != null && !q.trim().isEmpty()) {
+      where.append(" AND ( ua.note LIKE ? OR ua.ip_addr LIKE ? OR ua.user_agent LIKE ? OR ua.entity_type LIKE ? ) ");
+      String like = "%" + q.trim() + "%";
+      params.add(like); params.add(like); params.add(like); params.add(like);
     }
+    if (from != null) { where.append(" AND ua.created_at >= ? "); params.add(Timestamp.valueOf(from.atStartOfDay())); }
+    if (to != null)   { where.append(" AND ua.created_at <  ? "); params.add(Timestamp.valueOf(to.plusDays(1).atStartOfDay())); }
 
-    /* =========================================================
-       2. Ghi log
-       ========================================================= */
+    String sqlCount = "SELECT COUNT(*) FROM " + TBL + " ua " + where;
 
-    /**
-     * Ghi một activity (userId có thể null).
-     */
-    public boolean log(Integer userId,
-                       String action,
-                       String entityType,
-                       Integer entityId,
-                       String note,
-                       String ip,
-                       String ua) throws SQLException {
+    String sqlPage =
+        "SELECT ua.id, ua.user_id, ua.action, ua.entity_type, ua.entity_id, " +
+        "       ua.note, ua.ip_addr, ua.user_agent, ua.created_at, " +
+        "       u.username AS " + Activity.COL_USER_NAME + " " +
+        "FROM " + TBL + " ua " +
+        "LEFT JOIN [dbo].[Users] u ON ua.user_id = u.id " +
+        where + " " +
+        "ORDER BY ua.created_at DESC " +
+        "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
 
-        String sql = """
-            INSERT INTO """ + TBL + """
-            (user_id, action, entity_type, entity_id, note, ip_addr, user_agent, created_at)
-            VALUES (?,?,?,?,?,?,?, SYSDATETIME())
-            """;
+    List<Activity> items = new ArrayList<>();
+    int total = 0;
 
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-
-            // user_id
-            if (userId == null) {
-                ps.setNull(1, Types.INTEGER);
-            } else {
-                ps.setInt(1, userId);
-            }
-
-            ps.setString(2, trim(action, 64));
-            ps.setString(3, trim(entityType, 64));
-
-            if (entityId == null) {
-                ps.setNull(4, Types.INTEGER);
-            } else {
-                ps.setInt(4, entityId);
-            }
-
-            ps.setString(5, trim(note, 2000));
-            ps.setString(6, trim(ip, 64));
-            ps.setString(7, trim(ua, 255));
-
-            return ps.executeUpdate() > 0;
+    try (Connection c = DBConnection.getConnection()) {
+      // count
+      try (PreparedStatement ps = c.prepareStatement(sqlCount)) {
+        bind(ps, params);
+        try (ResultSet rs = ps.executeQuery()) { if (rs.next()) total = rs.getInt(1); }
+      }
+      // page
+      try (PreparedStatement ps = c.prepareStatement(sqlPage)) {
+        List<Object> pparams = new ArrayList<>(params);
+        pparams.add((p - 1) * s);
+        pparams.add(s);
+        bind(ps, pparams);
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) items.add(Activity.from(rs));
         }
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
+    return new Page<>(items, total, p, s);
+  }
 
-    /**
-     * Overload: tự lấy IP & UA từ request.
-     */
-    public boolean log(HttpServletRequest req,
-                       Integer userId,
-                       String action,
-                       String entityType,
-                       Integer entityId,
-                       String note) throws SQLException {
-        String ip = clientIp(req);
-        String ua = userAgent(req);
-        String path = req.getRequestURI();
-        String finalNote;
-        if (note == null || note.isBlank()) {
-            finalNote = path;
-        } else {
-            finalNote = note + " | " + path;
+  /* ========================= EXPORT CSV ========================= */
+  public void exportCsv(Integer userId, String action, String q,
+                        LocalDate from, LocalDate to,
+                        PrintWriter out) {
+    StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+    List<Object> params = new ArrayList<>();
+
+    if (userId != null) { where.append(" AND ua.user_id = ? "); params.add(userId); }
+    if (action != null && !action.trim().isEmpty()) { where.append(" AND ua.action = ? "); params.add(action.trim()); }
+    if (q != null && !q.trim().isEmpty()) {
+      where.append(" AND ( ua.note LIKE ? OR ua.ip_addr LIKE ? OR ua.user_agent LIKE ? OR ua.entity_type LIKE ? ) ");
+      String like = "%" + q.trim() + "%";
+      params.add(like); params.add(like); params.add(like); params.add(like);
+    }
+    if (from != null) { where.append(" AND ua.created_at >= ? "); params.add(Timestamp.valueOf(from.atStartOfDay())); }
+    if (to != null)   { where.append(" AND ua.created_at <  ? "); params.add(Timestamp.valueOf(to.plusDays(1).atStartOfDay())); }
+
+    String sql =
+        "SELECT ua.created_at, ua.user_id, u.username AS " + Activity.COL_USER_NAME + ", ua.action, " +
+        "       ua.entity_type, ua.entity_id, ua.note, ua.ip_addr, ua.user_agent " +
+        "FROM " + TBL + " ua " +
+        "LEFT JOIN [dbo].[Users] u ON ua.user_id = u.id " +
+        where + " " +
+        "ORDER BY ua.created_at DESC";
+
+    out.println("time,userId,username,action,entityType,entityId,note,ip,userAgent");
+    try (Connection c = DBConnection.getConnection();
+         PreparedStatement ps = c.prepareStatement(sql)) {
+      bind(ps, params);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          String time = ts(rs.getTimestamp("created_at"));
+          String uid  = toStr(rs.getObject("user_id"));
+          String un   = csv(rs.getString(Activity.COL_USER_NAME));
+          String ac   = csv(rs.getString("action"));
+          String et   = csv(rs.getString("entity_type"));
+          String eid  = toStr(rs.getObject("entity_id"));
+          String note = csv(rs.getString("note")).replace('\n',' ').replace('\r',' ');
+          String ip   = csv(rs.getString("ip_addr"));
+          String ua   = csv(rs.getString("user_agent")).replace('\n',' ').replace('\r',' ');
+          out.printf("%s,%s,%s,%s,%s,%s,%s,%s,%s%n",
+              time, uid, un, ac, et, eid, note, ip, ua);
         }
-        return log(userId, action, entityType, entityId, finalNote, ip, ua);
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
+    out.flush();
+  }
 
-    /**
-     * Hoàn thiện luôn hàm insert(Activity a) cho NetBeans khỏi báo.
-     * Nếu model Activity của bạn khác tên field thì chỉnh lại 5 dòng set* ở dưới.
-     */
-    public void insert(Activity a) throws SQLException {
-        if (a == null) {
-            throw new IllegalArgumentException("Activity is null");
-        }
-        // cố gắng map theo tên thuộc tính phổ biến
-        log(
-                a.getUserId(),               // Integer
-                a.getAction(),               // String
-                a.getEntityType(),           // String
-                a.getEntityId(),             // Integer
-                a.getNote(),                 // String
-                a.getIpAddr(),               // String
-                a.getUserAgent()             // String
-        );
+  /* ========================= Page wrapper ========================= */
+  public static class Page<T> {
+    private final List<T> items;
+    private final int total;
+    private final int page;
+    private final int size;
+
+    public Page(List<T> items, int total, int page, int size) {
+      this.items = items; this.total = total; this.page = page; this.size = size;
     }
-
-    /* =========================================================
-       3. Đọc log / phân trang
-       ========================================================= */
-
-    /**
-     * Lấy danh sách activity theo user; nếu userId = null -> lấy tất cả (cho admin).
-     */
-    public List<Map<String, Object>> listByUser(Integer userId, int limit, int offset) throws SQLException {
-        String sql = """
-            SELECT id, user_id, action, entity_type, entity_id, note,
-                   ip_addr, user_agent, created_at
-            FROM """ + TBL + """
-            WHERE (? IS NULL OR user_id = ?)
-            ORDER BY created_at DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-            """;
-
-        List<Map<String, Object>> out = new ArrayList<>();
-
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-
-            if (userId == null) {
-                ps.setNull(1, Types.INTEGER);
-                ps.setNull(2, Types.INTEGER);
-            } else {
-                ps.setInt(1, userId);
-                ps.setInt(2, userId);
-            }
-
-            ps.setInt(3, Math.max(0, offset));
-            ps.setInt(4, Math.max(1, limit));
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    out.add(map(rs));
-                }
-            }
-        }
-
-        return out;
+    public List<T> getItems() { return items; }
+    public int getTotal() { return total; }
+    public int getTotalItems() { return total; }  // alias cho JSP
+    public int getPage() { return page; }
+    public int getSize() { return size; }
+    public int getPageSize() { return size; }     // alias cho JSP
+    public int getTotalPages() {
+      return size <= 0 ? 1 : (int)Math.max(1, (total + size - 1) / size);
     }
+    public boolean isHasNext() { return page < getTotalPages(); }
+    public boolean isHasPrev() { return page > 1; }
+  }
 
-    /**
-     * Đếm tổng số activity theo user; userId = null -> đếm tất cả.
-     */
-    public int countByUser(Integer userId) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM " + TBL + " WHERE (? IS NULL OR user_id = ?)";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+  /* ========================= Ghi log ========================= */
+  public boolean log(Integer userId, String action, String entityType,
+                     Integer entityId, String note, String ip, String ua) throws SQLException {
+    String sql =
+        "INSERT INTO " + TBL + " " +
+        "(user_id, action, entity_type, entity_id, note, ip_addr, user_agent, created_at) " +
+        "VALUES (?,?,?,?,?,?,?, SYSDATETIME())";
 
-            if (userId == null) {
-                ps.setNull(1, Types.INTEGER);
-                ps.setNull(2, Types.INTEGER);
-            } else {
-                ps.setInt(1, userId);
-                ps.setInt(2, userId);
-            }
+    try (Connection c = DBConnection.getConnection();
+         PreparedStatement ps = c.prepareStatement(sql)) {
 
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+      if (userId == null) ps.setNull(1, Types.INTEGER); else ps.setInt(1, userId);
+      ps.setString(2, trim(action, 64));
+      ps.setString(3, trim(entityType, 64));
+      if (entityId == null) ps.setNull(4, Types.INTEGER); else ps.setInt(4, entityId);
+      ps.setString(5, trim(note, 2000));
+      ps.setString(6, trim(ip, 64));
+      ps.setString(7, trim(ua, 255));
+      return ps.executeUpdate() > 0;
     }
+  }
 
-    /**
-     * Gói gọn phân trang: page >= 1, size >= 1
-     */
-    public Page<Map<String, Object>> pageByUser(Integer userId, int page, int size) throws SQLException {
-        int p = Math.max(1, page);
-        int s = Math.max(1, size);
-        int total = countByUser(userId);
-        int offset = (p - 1) * s;
-        List<Map<String, Object>> items = listByUser(userId, s, offset);
-        return new Page<>(items, total, p, s);
+  public boolean log(HttpServletRequest req, Integer userId, String action,
+                     String entityType, Integer entityId, String note) throws SQLException {
+    String ip = clientIp(req);
+    String ua = userAgent(req);
+    String path = req.getRequestURI();
+    String finalNote = (note == null || note.trim().isEmpty()) ? path : (note + " | " + path);
+    return log(userId, action, entityType, entityId, finalNote, ip, ua);
+  }
+
+  public void insert(Activity a) throws SQLException {
+    if (a == null) throw new IllegalArgumentException("Activity is null");
+    log(a.getUserId(), a.getAction(), a.getEntityType(), a.getEntityId(),
+        a.getNote(), a.getIpAddr(), a.getUserAgent());
+  }
+
+  /* ========================= Helpers ========================= */
+  private static void bind(PreparedStatement ps, List<Object> params) throws SQLException {
+    for (int i = 0; i < params.size(); i++) {
+      Object v = params.get(i);
+      int idx = i + 1;
+      if (v == null) {
+        ps.setNull(idx, Types.NULL);
+      } else if (v instanceof Integer) {
+        ps.setInt(idx, (Integer) v);
+      } else if (v instanceof String) {
+        ps.setString(idx, (String) v);
+      } else if (v instanceof Timestamp) {
+        ps.setTimestamp(idx, (Timestamp) v);
+      } else if (v instanceof Long) {
+        ps.setLong(idx, (Long) v);
+      } else if (v instanceof Boolean) {
+        ps.setBoolean(idx, (Boolean) v);
+      } else {
+        ps.setObject(idx, v);
+      }
     }
+  }
 
-    /* =========================================================
-       4. Helpers
-       ========================================================= */
+  private static String trim(String s, int max) {
+    if (s == null) return null;
+    return s.length() <= max ? s : s.substring(0, max);
+  }
 
-    private static Map<String, Object> map(ResultSet rs) throws SQLException {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", rs.getInt("id"));
-        Object uid = rs.getObject("user_id");
-        row.put("userId", (uid instanceof Integer) ? (Integer) uid : null);
-        row.put("action", rs.getString("action"));
-        row.put("entityType", rs.getString("entity_type"));
-        row.put("entityId", rs.getObject("entity_id"));
-        row.put("note", rs.getString("note"));
-        row.put("ip", rs.getString("ip_addr"));
-        row.put("ua", rs.getString("user_agent"));
-        row.put("createdAt", rs.getTimestamp("created_at"));
-        return row;
-    }
+  private static String clientIp(HttpServletRequest r) {
+    String xff = r.getHeader("X-Forwarded-For");
+    if (xff != null && !xff.trim().isEmpty()) return xff.split(",")[0].trim();
+    return r.getRemoteAddr();
+  }
 
-    private static String trim(String s, int max) {
-        if (s == null) return null;
-        return s.length() <= max ? s : s.substring(0, max);
-    }
+  private static String userAgent(HttpServletRequest r) {
+    String ua = r.getHeader("User-Agent");
+    return ua == null ? null : trim(ua, 255);
+  }
 
-    private static String clientIp(HttpServletRequest r) {
-        String xff = r.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        return r.getRemoteAddr();
-    }
+  private static String ts(Timestamp t) {
+    if (t == null) return "";
+    return t.toLocalDateTime().toString().replace('T', ' ');
+  }
 
-    private static String userAgent(HttpServletRequest r) {
-        String ua = r.getHeader("User-Agent");
-        return ua == null ? null : trim(ua, 255);
-    }
+  private static String toStr(Object o) {
+    return o == null ? "" : String.valueOf(o);
+  }
+
+  private static String csv(String s) {
+    if (s == null) return "";
+    String v = s.replace("\"", "\"\"");
+    if (v.contains(",") || v.contains("\n") || v.contains("\r")) return "\"" + v + "\"";
+    return v;
+  }
 }

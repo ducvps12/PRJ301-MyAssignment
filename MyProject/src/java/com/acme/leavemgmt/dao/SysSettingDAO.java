@@ -73,4 +73,47 @@ public class SysSettingDAO {
             ps.executeUpdate();
         }
     }
+
+
+// ---- Cache TTL đơn giản ----
+private static volatile Map<String, SysSetting> CACHE = Collections.emptyMap();
+private static volatile long EXPIRES_AT = 0L; // epoch millis
+private static final long TTL_MS = 60_000;
+
+public Map<String, SysSetting> asMapCached() throws SQLException {
+    long now = System.currentTimeMillis();
+    if (now < EXPIRES_AT && !CACHE.isEmpty()) return CACHE;
+    Map<String, SysSetting> map = asMap();
+    CACHE = map;
+    EXPIRES_AT = now + TTL_MS;
+    return CACHE;
+}
+public void invalidateCache(){ CACHE = Collections.emptyMap(); EXPIRES_AT = 0L; }
+
+// ---- tiện ích đọc giá trị theo kiểu ----
+public String get(String key) throws SQLException {
+    SysSetting s = asMapCached().get(key);
+    return s == null ? null : s.getSettingValue();
+}
+public boolean getBool(String key, boolean defVal) throws SQLException {
+    String v = get(key);
+    if (v == null) return defVal;
+    return "1".equals(v) || "true".equalsIgnoreCase(v) || "yes".equalsIgnoreCase(v);
+}
+public int getInt(String key, int defVal) throws SQLException {
+    String v = get(key);
+    try { return v == null ? defVal : Integer.parseInt(v.trim()); }
+    catch (Exception e) { return defVal; }
+}
+
+
+
+
+
+
+
+
+
+
+
 }

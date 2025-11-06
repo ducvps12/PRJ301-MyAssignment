@@ -1,0 +1,7 @@
+<%@ taglib prefix="c" uri="http://jakarta.ee/jsp/jstl/core" %>
+<c:choose>
+  <c:when test="${'OPEN' eq s}"><span class="chip" style="border-color:#93c5fd;background:#e0f2fe">OPEN</span></c:when>
+  <c:when test="${'INPROGRESS' eq s}"><span class="chip" style="border-color:#fbbf24;background:#fef3c7">IN PROGRESS</span></c:when>
+  <c:when test="${'RESOLVED' eq s}"><span class="chip" style="border-color:#86efac;background:#dcfce7">RESOLVED</span></c:when>
+  <c:otherwise><span class="chip" style="border-color:#fecaca;background:#fee2e2">CLOSED</span></c:otherwise>
+</c:choose>

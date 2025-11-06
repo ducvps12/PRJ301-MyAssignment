@@ -2,6 +2,14 @@
 <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
 <%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
 
+<<c:set var="hasUser"   value="${not empty u}"/>
+<c:set var="isActive"  value="${hasUser and (u.status == 1 
+                       or u.status eq '1' 
+                       or u.status eq 'ACTIVE' 
+                       or u.employmentStatusCode eq 'ACTIVE')}"/>
+<c:set var="roleSafe"  value="${hasUser and not empty u.role ? u.role : ''}"/>
+
+
 <%
     // user được servlet đẩy sang
     com.acme.leavemgmt.model.User u =
@@ -20,6 +28,8 @@
     <meta charset="UTF-8">
     <title><c:choose><c:when test="${not empty u}">Chi tiết người dùng #${u.id}</c:when><c:otherwise>Không tìm thấy người dùng</c:otherwise></c:choose></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <c:set var="isActive" value="${u.status == 1 or u.status eq '1' or u.employmentStatusCode eq 'ACTIVE' or u.status eq 'ACTIVE'}"/>
+
     <style>
         /* ====== TOKEN MÀU ====== */
         :root {
@@ -340,12 +350,18 @@
                                         <span class="badge badge-role-staff">${u.role}</span>
                                     </c:otherwise>
                                 </c:choose>
-                                <c:if test="${u.status == 1}">
-                                    <span class="badge badge-status-active"><span class="presence-dot"></span> Đang hoạt động</span>
-                                </c:if>
-                                <c:if test="${u.status != 1}">
-                                    <span class="badge badge-status-inactive">Ngưng hoạt động</span>
-                                </c:if>
+                               
+                                
+
+<c:if test="${isActive}">
+  <span class="badge badge-status-active"><span class="presence-dot"></span> Đang hoạt động</span>
+</c:if>
+<c:if test="${not isActive}">
+  <span class="badge badge-status-inactive">Ngưng hoạt động</span>
+</c:if>
+
+
+
                             </div>
                             <div class="card-sub" style="margin-top:4px;">
                                 Username: <strong>${u.username}</strong>
@@ -354,7 +370,11 @@
                                 </c:if>
                             </div>
                             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                                <button class="btn" type="button" onclick="copyToClipboard('${u.email != null ? u.email : ""}')">Copy email</button>
+<button class="btn" type="button"
+        data-email="${hasUser and not empty u.email ? u.email : ''}"
+        onclick="copyToClipboard(this.getAttribute('data-email'))">
+  Copy email
+</button>
                                 <c:if test="${not empty u.email}">
                                     <a class="btn" href="mailto:${u.email}">Gửi mail</a>
                                 </c:if>
@@ -374,14 +394,18 @@
 
                         <div class="info-label">Trạng thái</div>
                         <div class="info-value">
+                          
                             <c:choose>
-                                <c:when test="${u.status == 1}">
-                                    <span class="badge badge-status-active">ACTIVE</span>
-                                </c:when>
-                                <c:otherwise>
-                                    <span class="badge badge-status-inactive">INACTIVE</span>
-                                </c:otherwise>
-                            </c:choose>
+  <c:when test="${isActive}">
+    <span class="badge badge-status-active">ACTIVE</span>
+  </c:when>
+  <c:otherwise>
+    <span class="badge badge-status-inactive">INACTIVE</span>
+  </c:otherwise>
+</c:choose>
+
+
+
                         </div>
 
                         <div class="info-label">Role hệ thống</div>
@@ -415,14 +439,19 @@
                             <li>Đã cấp role: <strong>${u.role}</strong></li>
                             <li>Phòng ban: <strong>${empty u.department ? 'Chưa gán' : u.department}</strong></li>
                             <li>Trạng thái:
+                            
+                                
+
                                 <c:choose>
-                                    <c:when test="${u.status == 1}">
-                                        <span class="badge badge-status-active">ACTIVE</span>
-                                    </c:when>
-                                    <c:otherwise>
-                                        <span class="badge badge-status-inactive">INACTIVE</span>
-                                    </c:otherwise>
-                                </c:choose>
+  <c:when test="${isActive}">
+    <span class="badge badge-status-active">ACTIVE</span>
+  </c:when>
+  <c:otherwise>
+    <span class="badge badge-status-inactive">INACTIVE</span>
+  </c:otherwise>
+</c:choose>
+
+
                             </li>
                             <li>Email: <strong>${empty u.email ? '—' : u.email}</strong></li>
                         </ul>
@@ -476,14 +505,20 @@
                         <c:if test="${not empty csrf}">
                             <input type="hidden" name="_token" value="<%=csrf%>">
                         </c:if>
-                        <c:choose>
-                            <c:when test="${u.status == 1}">
-                                <button type="submit" class="btn btn-danger">Vô hiệu hóa</button>
-                            </c:when>
-                            <c:otherwise>
-                                <button type="submit" class="btn btn-success">Kích hoạt</button>
-                            </c:otherwise>
-                        </c:choose>
+                       
+                        
+
+<c:choose>
+  <c:when test="${isActive}">
+    <button type="submit" class="btn btn-danger">Vô hiệu hóa</button>
+  </c:when>
+  <c:otherwise>
+    <button type="submit" class="btn btn-success">Kích hoạt</button>
+  </c:otherwise>
+</c:choose>
+
+
+
                     </form>
 
                     <!-- reset pw -->
@@ -534,7 +569,11 @@
                         <c:if test="${not empty u.email}">
                             <a class="btn" href="mailto:${u.email}">Gửi email</a>
                         </c:if>
-                        <button class="btn" type="button" onclick="copyToClipboard('${u.email != null ? u.email : ""}')">Copy email</button>
+<button class="btn" type="button"
+        data-email="${hasUser and not empty u.email ? u.email : ''}"
+        onclick="copyToClipboard(this.getAttribute('data-email'))">
+  Copy email
+</button>
                     </div>
                     <p class="card-sub">Có thể đồng bộ với HRM / Payroll nếu bạn kết nối.</p>
                 </div>

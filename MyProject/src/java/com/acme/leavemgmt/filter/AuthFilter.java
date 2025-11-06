@@ -65,22 +65,25 @@ public class AuthFilter implements Filter {
     // 7) Redirect tới /login của LoginServlet
     w.sendRedirect(ctx + "/login");
   }
+private boolean isPublic(String path) {
+  // Welcome & auth
+  if (path.equals("/") || path.equals("/index.jsp")) return true;
+  if (path.equals("/login") || path.equals("/logout")) return true;
 
-  private boolean isPublic(String path) {
-    // Welcome & auth
-    if (path.equals("/") || path.equals("/index.jsp")) return true;
-    if (path.equals("/login") || path.equals("/logout")) return true;
+  // 👉 Thêm forgot vào public (GET & POST đều qua đây)
+  if (path.equals("/forgot") || path.equals("/reset-password") || path.equals("/register")) return true;
 
-    // Static
-    if (path.startsWith("/assets/") || path.startsWith("/static/") ||
-        path.startsWith("/public/") || path.startsWith("/css/") ||
-        path.startsWith("/js/") || path.startsWith("/img/") ||
-        path.startsWith("/images/") ||
-        path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".png") ||
-        path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".gif") ||
-        path.endsWith(".svg") || path.endsWith(".ico") || path.endsWith(".webp")) {
-      return true;
-    }
-    return false;
+  // Static
+  if (path.startsWith("/assets/") || path.startsWith("/static/") ||
+      path.startsWith("/public/") || path.startsWith("/css/") ||
+      path.startsWith("/js/") || path.startsWith("/img/") ||
+      path.startsWith("/images/") ||
+      path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".png") ||
+      path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".gif") ||
+      path.endsWith(".svg") || path.endsWith(".ico") || path.endsWith(".webp")) {
+    return true;
   }
+  return false;
+}
+
 }

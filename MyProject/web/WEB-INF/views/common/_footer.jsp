@@ -35,18 +35,18 @@
       <div class="col support">
         <h4>Hỗ trợ</h4>
         <ul>
-          <li><a href="#">Tài liệu sử dụng</a></li>
-          <li><a href="#">Chính sách bảo mật</a></li>
-          <li><a href="#">Điều khoản & Điều kiện</a></li>
-          <li><a href="#">Liên hệ quản trị</a></li>
-        </ul>
+          <li><a href="${pageContext.request.contextPath}/support/guide">Tài liệu sử dụng</a></li>
+        <li><a href="${pageContext.request.contextPath}/support/faq">Câu hỏi thường gặp</a></li>
+    
+        <li><a href="${pageContext.request.contextPath}/support/contact">Liên hệ quản trị</a></li>
+      </ul>
       </div>
 
       <div class="col contact">
         <h4>Liên hệ</h4>
         <ul>
           <li><i class="fa fa-envelope"></i> support@leavemgmt.com</li>
-          <li><i class="fa fa-phone"></i> 0978.364.572</li>
+          <li><i class="fa fa-phone"></i> 0353.519.845</li>
           <li><i class="fa fa-map-marker"></i> FPT University, Hòa Lạc, Hà Nội</li>
         </ul>
         <button id="scrollTopBtn" title="Lên đầu trang">⬆ Top</button>
@@ -60,8 +60,8 @@
         © <fmt:formatDate value="${now}" pattern="yyyy"/> <strong>LeaveMgmt</strong>. All Rights Reserved.
       </div>
       <div class="right">
-        <a href="#">Chính sách bảo mật</a>
-        <a href="#">Điều khoản</a>
+        <a href="${pageContext.request.contextPath}/support/privacy">Chính sách bảo mật</a>
+        <a href="${pageContext.request.contextPath}/support/terms">Điều khoản</a>
         <button id="themeToggle" title="Đổi theme">🌓</button>
       </div>
     </div>
