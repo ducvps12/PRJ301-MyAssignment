@@ -19,6 +19,9 @@
     <res-auth>Container</res-auth>
   </resource-ref>
 
+<listener>
+  <listener-class>com.acme.leavemgmt.bootstrap.AppInit</listener-class>
+</listener>
 
   <!-- ===== (Optional) Health check ===== -->
   <servlet>
@@ -73,28 +76,38 @@
   </servlet-mapping>
 
   <!-- ================= PAYROLL ================= -->
-  <servlet>
-    <servlet-name>PayrollServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.service.PayrollServlet</servlet-class>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>PayrollServlet</servlet-name>
-    <url-pattern>/payroll</url-pattern>
-  </servlet-mapping>
+ <servlet>
+  <servlet-name>PayrollServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.service.PayrollServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>PayrollServlet</servlet-name>
+  <url-pattern>/payroll</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+  <servlet-name>PayrollServlet</servlet-name>
+  <url-pattern>/payroll/run</url-pattern>
+</servlet-mapping>
+
 
   <!-- ================= RECRUIT ================= -->
-  <servlet>
-    <servlet-name>RecruitServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.service.RecruitServlet</servlet-class>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>RecruitServlet</servlet-name>
-    <url-pattern>/recruit/job</url-pattern>
-  </servlet-mapping>
-  <servlet-mapping>
-    <servlet-name>RecruitServlet</servlet-name>
-    <url-pattern>/recruit/*</url-pattern>
-  </servlet-mapping>
+<servlet>
+  <servlet-name>RecruitServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.service.RecruitServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>RecruitServlet</servlet-name>
+  <url-pattern>/recruit</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+  <servlet-name>RecruitServlet</servlet-name>
+  <url-pattern>/recruit/job</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+  <servlet-name>RecruitServlet</servlet-name>
+  <url-pattern>/recruit/app</url-pattern>
+</servlet-mapping>
+
   <!-- ===================== SERVLETS ===================== -->
   <!-- Auth / Login -->
   <servlet>

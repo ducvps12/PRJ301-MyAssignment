@@ -2,7 +2,7 @@ package com.acme.leavemgmt.service;
 
 import com.acme.leavemgmt.dao.AttendanceDAO;
 import com.acme.leavemgmt.dao.PayrollDAO;
-import com.acme.leavemgmt.dao.PayrollDAO.PayrollItem; // <-- dùng inner class của DAO
+import com.acme.leavemgmt.dao.PayrollDAO.PayrollItem;
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.Csrf;
 
@@ -32,17 +32,21 @@ public class PayrollServlet extends HttpServlet {
     this.attendance = new AttendanceDAO(ds);
   }
 
-  // ======= Danh sách =======
+  // ================== GET: xem danh sách ==================
   @Override protected void doGet(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
+
+    req.setCharacterEncoding("UTF-8");
+    resp.setCharacterEncoding("UTF-8");
 
     int y = intParam(req, "y", LocalDate.now().getYear());
     int m = intParam(req, "m", LocalDate.now().getMonthValue());
 
-    long runId = payroll.findRun(y, m).orElse(-1L);
+    // nếu chưa có run thì tạo luôn cho tiện xem/sửa
+    long runId = payroll.findRun(y, m).orElseGet(() -> payroll.createRun(y, m));
 
-    // FIX: đúng kiểu trả về của DAO
-    List<PayrollItem> items = payroll.listItems(runId);
+    // >>> DAO dạng đối tượng:
+    List<PayrollItem> items = payroll.listItemsAsObjects(runId);
 
     req.setAttribute("y", y);
     req.setAttribute("m", m);
@@ -51,9 +55,12 @@ public class PayrollServlet extends HttpServlet {
     req.getRequestDispatcher("/WEB-INF/views/payroll/list.jsp").forward(req, resp);
   }
 
-  // ======= Tạo/tính run =======
+  // ================== POST: tính & lưu ==================
   @Override protected void doPost(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
+
+    req.setCharacterEncoding("UTF-8");
+    resp.setCharacterEncoding("UTF-8");
 
     Csrf.verify(req);
 
@@ -63,7 +70,7 @@ public class PayrollServlet extends HttpServlet {
     // 1) đảm bảo có run
     long runId = payroll.findRun(y, m).orElseGet(() -> payroll.createRun(y, m));
 
-    // 2) lấy danh sách user cần tính (tuỳ bạn – ở đây giả định có trong ServletContext)
+    // 2) lấy danh sách user cần tính
     @SuppressWarnings("unchecked")
     List<User> users = (List<User>) getServletContext().getAttribute("ALL_USERS");
     if (users == null || users.isEmpty()) {
@@ -71,54 +78,46 @@ public class PayrollServlet extends HttpServlet {
       return;
     }
 
-    // 3) Tính cho từng user (rule demo)
+    // 3) Tính cho từng user
     for (User u : users) {
-      if (u == null || !"ACTIVE".equalsIgnoreCase(String.valueOf(u.getStatus()))) continue;
+      if (u == null) continue;
+      Object st = safeObj(u.getStatus());
+      if (st != null && !"ACTIVE".equalsIgnoreCase(String.valueOf(st))) continue;
 
-      Long userId = toLong(u.getId()); // tránh lệch int/long
+      Long userId = toLong(u.getId());
+      if (userId == null) continue;
+
       Map<String,Object> at = attendance.monthSummary(userId, y, m);
-      int workdays   = ((Number) at.getOrDefault("presentDays",
-                          at.getOrDefault("workdays", 0))).intValue();
-      int lateCount  = ((Number) at.getOrDefault("lateCount", 0)).intValue();
-      int otMinutes  = ((Number) at.getOrDefault("totalOTMin", 0)).intValue();
+      int workdays  = num(at.getOrDefault("presentDays", at.getOrDefault("workdays", 0))).intValue();
+      int lateCount = num(at.getOrDefault("lateCount", 0)).intValue();
+      int otMinutes = num(at.getOrDefault("totalOTMin", 0)).intValue();
 
-      // Base salary: cố gắng đọc từ User bằng nhiều tên thường gặp; nếu không có => 10,000,000
-      double baseInput = baseSalaryOf(u, 10_000_000d); 
+      double baseInput = baseSalaryOf(u, 10_000_000d);
       BigDecimal base = bd(baseInput);
 
-      // lương theo ngày công (22 ngày/tháng)
-      BigDecimal dayRate   = base.divide(bd(22), 2, RoundingMode.HALF_UP);
-      BigDecimal baseSalary= dayRate.multiply(bd(workdays));
+      BigDecimal dayRate    = base.divide(bd(22), 2, RoundingMode.HALF_UP);
+      BigDecimal baseSalary = dayRate.multiply(bd(workdays));
 
-      // OT: 1.5x theo giờ (8h/ngày, 22 ngày)
       BigDecimal hourly = base.divide(bd(22 * 8), 2, RoundingMode.HALF_UP);
       BigDecimal otPay  = bd(otMinutes / 60.0).multiply(hourly).multiply(bd(1.5));
 
-      // Phụ cấp demo
-      BigDecimal allowance = bd(500_000);
+      BigDecimal allowance = bd(500_000);               // demo
+      BigDecimal penalty   = bd(lateCount * 30_000);    // demo
 
-      // Phạt đi muộn: 30k/lần
-      BigDecimal penalty = bd(lateCount * 30_000);
-
-      // BHXH 10% baseSalary
       BigDecimal insurance = baseSalary.multiply(bd(0.10)).setScale(0, RoundingMode.HALF_UP);
-
-      // Thuế TNCN 5% trên (baseSalary + ot + allowance - insurance)
-      BigDecimal taxable = baseSalary.add(otPay).add(allowance).subtract(insurance);
+      BigDecimal taxable   = baseSalary.add(otPay).add(allowance).subtract(insurance);
       if (taxable.signum() < 0) taxable = BigDecimal.ZERO;
       BigDecimal tax = taxable.multiply(bd(0.05)).setScale(0, RoundingMode.HALF_UP);
 
-      // Thưởng theo phòng ban (demo)
-      BigDecimal bonus = switch (safe(u.getDepartment())) {
+      BigDecimal bonus = switch (safeStr(u.getDepartment()).toUpperCase()) {
         case "SALE", "SALES" -> bd(1_000_000);
-        case "QA" -> bd(500_000);
-        default -> BigDecimal.ZERO;
+        case "QA"            -> bd(500_000);
+        default              -> BigDecimal.ZERO;
       };
 
       BigDecimal net = baseSalary.add(allowance).add(otPay).add(bonus)
           .subtract(penalty).subtract(insurance).subtract(tax);
 
-      // Dùng đúng kiểu PayrollItem của DAO (các setter này tồn tại trong inner class của DAO)
       PayrollItem pi = new PayrollItem();
       pi.setRunId(runId);
       pi.setUserId(userId);
@@ -130,7 +129,7 @@ public class PayrollServlet extends HttpServlet {
       pi.setInsurance(insurance);
       pi.setTax(tax);
       pi.setNetPay(net);
-      pi.setNote("Auto calc " + y + "-" + (m < 10 ? "0" : "") + m);
+      pi.setNote("Auto calc %d-%02d".formatted(y, m));
 
       payroll.upsertItem(pi);
     }
@@ -138,12 +137,17 @@ public class PayrollServlet extends HttpServlet {
     resp.sendRedirect(req.getContextPath() + "/payroll?y="+y+"&m="+m);
   }
 
-  // ===== Helpers =====
+  // ================== Helpers ==================
   private static int intParam(HttpServletRequest r, String k, int d){
     try { return Integer.parseInt(r.getParameter(k)); } catch(Exception e){ return d; }
   }
-  private static String safe(Object s){ return s==null? "" : String.valueOf(s); }
   private static BigDecimal bd(double v){ return BigDecimal.valueOf(v); }
+  private static Number num(Object o){
+    if (o instanceof Number n) return n;
+    try { return Double.valueOf(String.valueOf(o)); } catch(Exception e){ return 0; }
+  }
+  private static Object safeObj(Object o){ return o; }
+  private static String safeStr(Object o){ return o == null ? "" : String.valueOf(o); }
 
   /** Lấy base salary từ User bằng nhiều tên getter phổ biến; nếu không có thì trả defaultVal. */
   private static double baseSalaryOf(User u, double defaultVal){
@@ -163,10 +167,10 @@ public class PayrollServlet extends HttpServlet {
   /** Chuẩn hoá về Long an toàn (User#getId có thể là int/Integer/long/Long/String). */
   private static Long toLong(Object id) {
     if (id == null) return null;
-    if (id instanceof Long) return (Long) id;
-    if (id instanceof Integer) return Long.valueOf(((Integer) id).longValue());
-    if (id instanceof Short) return Long.valueOf(((Short) id).longValue());
-    if (id instanceof Byte) return Long.valueOf(((Byte) id).longValue());
+    if (id instanceof Long)    return (Long) id;
+    if (id instanceof Integer) return ((Integer) id).longValue();
+    if (id instanceof Short)   return ((Short) id).longValue();
+    if (id instanceof Byte)    return ((Byte) id).longValue();
     try { return Long.valueOf(String.valueOf(id).trim()); } catch (Exception e) { return null; }
   }
 }

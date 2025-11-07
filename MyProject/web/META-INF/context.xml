@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Context>
-  <Resource name="jdbc/LeaveDB"
-            auth="Container"
-            type="javax.sql.DataSource"
-            factory="org.apache.tomcat.jdbc.pool.DataSourceFactory"
-            driverClassName="com.microsoft.sqlserver.jdbc.SQLServerDriver"
-            url="jdbc:sqlserver://localhost:1433;databaseName=P42_AssignmentV10;encrypt=false"
-            username="ducvps"
-            password="Mtdvpscom1@"
+<Context path="/MyProject" reloadable="false">
 
-            initialSize="3"
-            maxTotal="30"
-            maxIdle="10"
-            minIdle="3"
+  <!-- JNDI DataSource: jdbc/LeaveDB -->
+  <Resource
+      name="jdbc/LeaveDB"
+      auth="Container"
+      type="javax.sql.DataSource"
+      factory="org.apache.tomcat.jdbc.pool.DataSourceFactory"
+      driverClassName="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+      url="jdbc:sqlserver://localhost:1433;databaseName=P42_AssignmentW10;encrypt=true;trustServerCertificate=true;loginTimeout=5"
+      username="ducvps"
+      password="Mtdvpscom1@"
 
-            testOnBorrow="true"
-            testWhileIdle="true"
-            validationQuery="SELECT 1"
-            validationQueryTimeout="5"
-            timeBetweenEvictionRunsMillis="30000"
-            minEvictableIdleTimeMillis="600000"
+      initialSize="3"
+      maxTotal="30"
+      maxIdle="10"
+      minIdle="3"
 
-            removeAbandoned="true"
-            removeAbandonedTimeout="60"
-            logAbandoned="true"/>
+      testOnBorrow="true"
+      validationQuery="SELECT 1"
+
+      timeBetweenEvictionRunsMillis="30000"
+      minEvictableIdleTimeMillis="60000"
+      removeAbandonedOnBorrow="true"
+      removeAbandonedTimeout="60"/>
 </Context>

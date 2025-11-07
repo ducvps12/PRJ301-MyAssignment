@@ -1,13 +1,27 @@
 package com.acme.leavemgmt.dao;
 
 import com.acme.leavemgmt.util.DBConnection;
-
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import javax.sql.DataSource;
 
 public class DivisionDAO {
 
+    /* ========== State ========== */
+    private final DataSource ds; // có thể null -> fallback DBConnection
+
+    /* ========== Ctors ========== */
+    public DivisionDAO(DataSource ds) { this.ds = ds; }
+    public DivisionDAO() { this.ds = null; }
+
+    /* ========== Connection helper ========== */
+    private Connection getConn() throws SQLException {
+        return (ds != null) ? ds.getConnection() : DBConnection.getConnection();
+    }
+
+    /* ========== DTO ========== */
     public static class Division {
         private Integer id;
         private String code;
@@ -26,15 +40,44 @@ public class DivisionDAO {
         public Timestamp getCreatedAt() { return createdAt; }
         public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
 
-        public void setStatus(String trim) {
-            throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        /** Cho UI/JSP cũ set theo chuỗi trạng thái */
+        public void setStatus(String s) {
+            if (s == null) { this.isActive = null; return; }
+            String v = s.trim().toUpperCase();
+            if ("ACTIVE".equals(v) || "1".equals(v) || "TRUE".equals(v)) this.isActive = true;
+            else if ("INACTIVE".equals(v) || "0".equals(v) || "FALSE".equals(v)) this.isActive = false;
+            else this.isActive = null;
         }
     }
 
+    /* ========== Simple listAll() cho select box ========== */
+    public List<Division> listAll() {
+        String sql = "SELECT id, code, name, is_active, created_at FROM Divisions WHERE is_active = 1 ORDER BY name, code";
+        try (Connection c = getConn();
+             PreparedStatement ps = c.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            List<Division> list = new ArrayList<>();
+            while (rs.next()) {
+                Division d = new Division();
+                d.setId(rs.getInt("id"));
+                d.setCode(rs.getString("code"));
+                d.setName(rs.getString("name"));
+                d.setIsActive(rs.getBoolean("is_active"));
+                d.setCreatedAt(rs.getTimestamp("created_at"));
+                list.add(d);
+            }
+            return list;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    /* ========== Các hàm phân trang / CRUD (giữ nguyên logic bạn đã viết) ========== */
     public int count(String q) throws SQLException {
         String base = "SELECT COUNT(*) FROM Divisions WHERE is_active = 1";
         String sql = (q == null || q.isBlank()) ? base : base + " AND (code LIKE ? OR name LIKE ?)";
-        try (Connection c = DBConnection.getConnection();
+        try (Connection c = getConn();
              PreparedStatement ps = c.prepareStatement(sql)) {
             if (sql.contains("?")) {
                 String like = "%" + q + "%";
@@ -59,7 +102,7 @@ public class DivisionDAO {
         sb.append(" ORDER BY name OFFSET ? ROWS FETCH NEXT ? ROWS ONLY ");
         args.add((page-1)*pageSize); args.add(pageSize);
 
-        try (Connection c = DBConnection.getConnection();
+        try (Connection c = getConn();
              PreparedStatement ps = c.prepareStatement(sb.toString())) {
             for (int i=0;i<args.size();i++) ps.setObject(i+1, args.get(i));
             try (ResultSet rs = ps.executeQuery()) {
@@ -84,7 +127,7 @@ public class DivisionDAO {
             FROM Divisions
             WHERE id = ? AND is_active = 1
         """;
-        try (Connection c = DBConnection.getConnection();
+        try (Connection c = getConn();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
@@ -105,7 +148,7 @@ public class DivisionDAO {
             INSERT INTO Divisions(code, name, is_active, created_at)
             VALUES(?, ?, 1, SYSDATETIME())
         """;
-        try (Connection c = DBConnection.getConnection();
+        try (Connection c = getConn();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, d.getCode());
             ps.setString(2, d.getName());
@@ -119,7 +162,7 @@ public class DivisionDAO {
             SET code = ?, name = ?
             WHERE id = ? AND is_active = 1
         """;
-        try (Connection c = DBConnection.getConnection();
+        try (Connection c = getConn();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, d.getCode());
             ps.setString(2, d.getName());
@@ -130,7 +173,7 @@ public class DivisionDAO {
 
     /** Xóa mềm: chuyển is_active=0. Trả false nếu còn user tham chiếu. */
     public boolean delete(int id) throws SQLException {
-        try (Connection c = DBConnection.getConnection()) {
+        try (Connection c = getConn()) {
             try (PreparedStatement chk = c.prepareStatement(
                     "SELECT COUNT(*) FROM Users WHERE division_id=? AND (deleted_at IS NULL OR 1=1)")) {
                 chk.setInt(1, id);

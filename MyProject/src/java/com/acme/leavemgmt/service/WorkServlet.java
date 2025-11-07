@@ -3,17 +3,20 @@ package com.acme.leavemgmt.service;
 import com.acme.leavemgmt.dao.WorkDAO;
 import com.acme.leavemgmt.model.WorkReport;
 
-import javax.sql.DataSource;
-import javax.naming.InitialContext;                 // Fallback JNDI
+import jakarta.annotation.Resource;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import javax.naming.InitialContext;
+import javax.sql.DataSource;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 @WebServlet(urlPatterns = {"/work/*"})
@@ -21,18 +24,27 @@ public class WorkServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
 
+    @Resource(name = "jdbc/LeaveDB")
+    private DataSource injectedDs;
+
     private WorkDAO dao;
 
     @Override
     public void init() {
-        // 1) Lấy DS từ ServletContext (đã gắn bởi AppInit) ; 2) Fallback JNDI nếu thiếu
-        DataSource ds = (DataSource) getServletContext().getAttribute("DS");
+        DataSource ds = injectedDs;
+        if (ds == null) {
+            Object ctxObj = getServletContext().getAttribute("DS");
+            if (ctxObj instanceof DataSource) {
+                ds = (DataSource) ctxObj;
+            }
+        }
         if (ds == null) {
             try {
                 ds = (DataSource) new InitialContext().lookup("java:comp/env/jdbc/LeaveDB");
-                if (ds != null) getServletContext().setAttribute("DS", ds);
+                getServletContext().setAttribute("DS", ds);
             } catch (Exception e) {
-                throw new IllegalStateException("DataSource 'DS' not found. Configure JNDI jdbc/LeaveDB.", e);
+                throw new IllegalStateException(
+                        "DataSource jdbc/LeaveDB not found. Check context.xml + driver in tomcat/lib.", e);
             }
         }
         dao = new WorkDAO(ds);
@@ -42,18 +54,17 @@ public class WorkServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // Charset chuẩn
         req.setCharacterEncoding(StandardCharsets.UTF_8.name());
         resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        // Với mapping "/work/*": null => "/work", "/todos" => "/work/todos"
-        String path = n(req.getPathInfo());
+        String path = nz(req.getPathInfo());
         int page = intParam(req, "page", 1);
 
+        // /work/todos
         if ("/todos".equals(path)) {
-            String status = n(req.getParameter("status"));        // OPEN/DOING/DONE/...
-            Long assignee = asLong(req.getParameter("assignee"));
-            var rows = dao.listTodos(status, assignee, page, 20);
+            String status = nz(req.getParameter("status"));
+            Long assignee = toLong(req.getParameter("assignee"));
+            List<?> rows = dao.listTodos(status, assignee, page, 20);
 
             req.setAttribute("todos", rows);
             req.setAttribute("status", status);
@@ -63,15 +74,14 @@ public class WorkServlet extends HttpServlet {
             return;
         }
 
-        // --------- Reports ----------
-        String type = n(req.getParameter("type"));                // DAILY/WEEKLY/...
-        LocalDate from = optDate(req, "from", LocalDate.now().minusDays(14));
-        LocalDate to   = optDate(req, "to",   LocalDate.now());
+        // /work (reports)
+        String type = nz(req.getParameter("type")); // DAILY/WEEKLY/...
+        LocalDate from = dateParam(req, "from", LocalDate.now().minusDays(14));
+        LocalDate to   = dateParam(req, "to",   LocalDate.now());
 
-        Object me = req.getSession().getAttribute("currentUser");
-        Long userId = asLong(getId(me));
+        Long userId = currentUserId(req);
+        List<?> reports = dao.listReports(userId, from, to, type);
 
-        var reports = dao.listReports(userId, from, to, type);
         req.setAttribute("reports", reports);
         req.setAttribute("type", type);
         req.setAttribute("from", from);
@@ -87,115 +97,121 @@ public class WorkServlet extends HttpServlet {
         req.setCharacterEncoding(StandardCharsets.UTF_8.name());
         resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        // Nếu có middleware CSRF riêng: Csrf.verify(req);
+        String act = nz(req.getParameter("act"));
+        Long userId = currentUserId(req);
 
-        String act = n(req.getParameter("act"));
-        Object me = req.getSession().getAttribute("currentUser");
-        Long userId = asLong(getId(me));
+        if ("saveReport".equals(act)) {
+            LocalDate date   = dateParam(req, "date", LocalDate.now());
+            String type      = nz(req.getParameter("type"));
+            String summary   = nz(req.getParameter("summary"));
+            String blockers  = nz(req.getParameter("blockers"));
+            String planNext  = nz(req.getParameter("planNext"));
+            String tags      = nz(req.getParameter("tags"));
+            String hoursStr  = nz(req.getParameter("hours"));
 
-        switch (act) {
-            case "saveReport": {
-                LocalDate date   = optDate(req, "date", LocalDate.now());
-                String type      = n(req.getParameter("type"));
-                String summary   = n(req.getParameter("summary"));
-                String blockers  = n(req.getParameter("blockers"));
-                String planNext  = n(req.getParameter("planNext"));
-                String tags      = n(req.getParameter("tags"));
-                String hoursStr  = n(req.getParameter("hours"));
+            String content = ("## Summary\n"   + dashIfEmpty(summary)  + "\n\n" +
+                              "## Blockers\n"  + dashIfEmpty(blockers) + "\n\n" +
+                              "## Plan next\n" + dashIfEmpty(planNext)).trim();
 
-                String content = (
-                        "## Summary\n"  + emptyDash(summary)  + "\n\n" +
-                        "## Blockers\n" + emptyDash(blockers) + "\n\n" +
-                        "## Plan next\n" + emptyDash(planNext)
-                ).trim();
-
-                var wr = new WorkReport();
-                wr.setUserId(userId);
-                wr.setWorkDate(date);
-                wr.setType(type);
-                wr.setContent(content);
-                wr.setTags(tags.isBlank() ? null : tags);
-                if (!hoursStr.isBlank()) {
-                    try { wr.setHours(new java.math.BigDecimal(hoursStr)); } catch (Exception ignore) {}
-                }
-
-                dao.upsertReport(wr);
-                resp.sendRedirect(req.getContextPath()+"/work?type="+enc(type)+"&from="+date+"&to="+date);
-                return;
+            WorkReport wr = new WorkReport();
+            wr.setUserId(userId);
+            wr.setWorkDate(date);
+            wr.setType(type);
+            wr.setContent(content);
+            wr.setTags(tags.isEmpty() ? null : tags);
+            if (!hoursStr.isEmpty()) {
+                try { wr.setHours(new BigDecimal(hoursStr)); } catch (Exception ignored) {}
             }
 
-            case "addTodo": {
-                String title    = n(req.getParameter("title"));
-                Long assignee   = asLong(req.getParameter("assignee"));
-                LocalDate due   = optDate(req, "due", null);
-                String priority = n(req.getParameter("priority"));     // LOW/NORMAL/HIGH
-                String tags     = n(req.getParameter("tags"));
-                String note     = n(req.getParameter("note"));
-
-                dao.addTodo(title, assignee, due, priority, tags, note);
-                resp.sendRedirect(req.getContextPath()+"/work/todos");
-                return;
-            }
-
-            case "setTodoStatus": {
-                long id = longParam(req, "id");
-                String status = n(req.getParameter("status"));
-                dao.setTodoStatus(id, status);
-                resp.sendRedirect(safeBack(req, req.getContextPath()+"/work/todos"));
-                return;
-            }
-
-            default:
-                resp.sendRedirect(safeBack(req, req.getContextPath()+"/work"));
+            dao.upsertReport(wr);
+            resp.sendRedirect(req.getContextPath() + "/work?type=" + url(type) + "&from=" + date + "&to=" + date);
+            return;
         }
+
+        if ("addTodo".equals(act)) {
+            String title    = nz(req.getParameter("title"));
+            Long assignee   = toLong(req.getParameter("assignee"));
+            LocalDate due   = dateParam(req, "due", null);
+            String priority = nz(req.getParameter("priority"));
+            String tags     = nz(req.getParameter("tags"));
+            String note     = nz(req.getParameter("note"));
+
+            dao.addTodo(title, assignee, due, priority, tags, note);
+            resp.sendRedirect(req.getContextPath() + "/work/todos");
+            return;
+        }
+
+        if ("setTodoStatus".equals(act)) {
+            long id = longParam(req, "id", -1);
+            String status = nz(req.getParameter("status"));
+            if (id > 0 && !status.isEmpty()) {
+                dao.setTodoStatus(id, status);
+            }
+            resp.sendRedirect(backOr(req, req.getContextPath() + "/work/todos"));
+            return;
+        }
+
+        // default
+        resp.sendRedirect(backOr(req, req.getContextPath() + "/work"));
     }
 
-    /* ===================== Helpers ===================== */
+    // ===== Helpers =====
 
-    private static String n(String s){ return s == null ? "" : s.trim(); }
+    private static String nz(String s){ return (s == null) ? "" : s.trim(); }
 
-    private static String enc(String s){
-        try { return java.net.URLEncoder.encode(n(s), StandardCharsets.UTF_8); }
-        catch (Exception e) { return n(s); }
+    private static String url(String s){
+        try { return java.net.URLEncoder.encode(nz(s), StandardCharsets.UTF_8.name()); }
+        catch (Exception e) { return nz(s); }
     }
 
-    private static String safeBack(HttpServletRequest r, String def){
-        String ref = n(r.getHeader("Referer"));
+    private static String backOr(HttpServletRequest r, String def){
+        String ref = nz(r.getHeader("Referer"));
         return ref.isEmpty() ? def : ref;
     }
 
     private static int intParam(HttpServletRequest r, String k, int d){
-        try { return Integer.parseInt(n(r.getParameter(k))); } catch (Exception e){ return d; }
+        try { return Integer.parseInt(nz(r.getParameter(k))); } catch (Exception e){ return d; }
     }
 
-    private static long longParam(HttpServletRequest r, String k){
-        return Long.parseLong(n(r.getParameter(k)));
+    private static long longParam(HttpServletRequest r, String k, long d){
+        try { return Long.parseLong(nz(r.getParameter(k))); } catch (Exception e){ return d; }
     }
 
-    private static LocalDate optDate(HttpServletRequest r, String k, LocalDate def){
-        String v = n(r.getParameter(k));
-        if (v.isBlank()) return def;
+    private static LocalDate dateParam(HttpServletRequest r, String k, LocalDate def){
+        String v = nz(r.getParameter(k));
+        if (v.isEmpty()) return def;
         try { return LocalDate.parse(v); } catch (Exception e){ return def; }
     }
 
-    /** lấy id linh hoạt từ User/Map/Number/String */
-    private static Object getId(Object me){
+    /** Lấy id linh hoạt từ session currentUser (User/Map/Number/String) */
+    private static Long currentUserId(HttpServletRequest req){
+        Object me = req.getSession().getAttribute("currentUser");
         if (me == null) return null;
-        try { return me.getClass().getMethod("getId").invoke(me); }
-        catch (Exception ignore) {
-            if (me instanceof Map<?,?> m) return m.get("id");
-            return me;
+
+        // Thử getId() nếu có
+        try {
+            Object val = me.getClass().getMethod("getId").invoke(me);
+            return toLong(val);
+        } catch (Exception ignore) {
+            // bỏ qua
         }
+        // Nếu là Map -> lấy "id"
+        if (me instanceof Map) {
+            Object idVal = ((Map<?, ?>) me).get("id");
+            return toLong(idVal);
+        }
+        // Còn lại: cố gắng parse trực tiếp
+        return toLong(me);
     }
 
-    private static Long asLong(Object v){
+    private static Long toLong(Object v){
         if (v == null) return null;
-        if (v instanceof Long l) return l;
-        if (v instanceof Integer i) return i.longValue();
-        if (v instanceof Number n) return n.longValue();
+        if (v instanceof Long)   return (Long) v;
+        if (v instanceof Integer) return ((Integer) v).longValue();
+        if (v instanceof Number)  return ((Number) v).longValue();
         String s = String.valueOf(v).trim();
         return s.isEmpty() ? null : Long.valueOf(s);
     }
 
-    private static String emptyDash(String s){ return (s == null || s.isBlank()) ? "—" : s; }
+    private static String dashIfEmpty(String s){ return (s == null || s.trim().isEmpty()) ? "—" : s; }
 }
