@@ -35,8 +35,7 @@
     .info form{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .info form .full{grid-column:1/-1}
     label{display:block;font-weight:600;margin:4px 0 6px}
-    input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:12px;background:transparent;
-      color:inherit;outline:none;resize:vertical}
+    input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:12px;background:transparent;color:inherit;outline:none}
     input:focus,select:focus,textarea:focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent)}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--bd);font-size:12px}
@@ -45,7 +44,6 @@
     .btn{appearance:none;border:none;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
     .btn.pri{background:var(--pri);color:var(--pri-ink)}
     .btn.ghost{background:transparent;border:1px solid var(--bd)}
-    .note{margin-top:8px;font-size:13px}
     .alert{margin:16px 0;padding:10px 12px;border-radius:12px;border:1px solid var(--bd)}
     .alert.ok{border-color:color-mix(in oklab, var(--ok) 50%, var(--bd));background:color-mix(in oklab, var(--ok) 10%, transparent)}
     .alert.no{border-color:color-mix(in oklab, var(--no) 50%, var(--bd));background:color-mix(in oklab, var(--no) 10%, transparent)}
@@ -65,10 +63,8 @@
     <c:set var="u" value="${me}"/>
     <c:set var="canEdit" value="${canEdit}"/>
     <c:set var="ro" value="${!canEdit ? 'readonly' : ''}"/>
-    <c:set var="dis" value="${!canEdit ? 'disabled' : ''}"/>
     <c:set var="isAdmin" value="${sessionScope.currentUser != null && sessionScope.currentUser.role == 'ADMIN'}"/>
 
-    <%-- Chuẩn hoá status để không còn lỗi ép kiểu EL --%>
     <c:set var="s" value="${u.status}"/>
     <c:set var="isActive" value="${s == 'ACTIVE' or s == '1' or fn:toLowerCase(s) == 'true'}"/>
 
@@ -89,24 +85,17 @@
           </c:choose>
         </div>
 
-        <div class="note muted" style="margin-top:12px">
+        <div class="muted" style="margin-top:12px">
           <div class="row">
             <span class="chip">ID: #${u.id}</span>
             <span class="chip">Tài khoản: ${u.username}</span>
           </div>
           <div class="row" style="margin-top:8px">
             <span class="chip ${isActive ? 'ok' : ''}">
-              Trạng thái:
-              <strong>
-                <c:out value="${isActive ? 'ACTIVE' : (empty s ? 'UNKNOWN' : s)}"/>
-              </strong>
+              Trạng thái: <strong><c:out value="${isActive ? 'ACTIVE' : (empty s ? 'UNKNOWN' : s)}"/></strong>
             </span>
-
-            <%-- fmt cần java.util.Date: dùng getter createdAtDate trong model --%>
             <c:if test="${not empty u.createdAtDate}">
-              <span class="chip">
-                Tạo lúc: <fmt:formatDate value="${u.createdAtDate}" pattern="dd/MM/yyyy HH:mm"/>
-              </span>
+              <span class="chip">Tạo lúc: <fmt:formatDate value="${u.createdAtDate}" pattern="dd/MM/yyyy HH:mm"/></span>
             </c:if>
           </div>
         </div>
@@ -114,9 +103,12 @@
 
       <div class="info">
         <form method="post" action="${pageContext.request.contextPath}/profile" autocomplete="on">
+          <!-- CSRF -->
+          <input type="hidden" name="_token" value="${sessionScope.csrfToken}"/>
+
           <div class="full">
             <label>Họ và tên</label>
-            <input type="text" name="fullName" value="${u.fullName}" ${ro} ${canEdit ? 'required' : ''}/>
+            <input type="text" name="fullName" value="${u.fullName}" ${ro} required/>
           </div>
 
           <div>
@@ -128,24 +120,30 @@
             <input name="phone" value="${u.phone}" ${ro}/>
           </div>
 
+          <!-- DEPARTMENT (FK: có cả tên & id) -->
           <div>
             <label>Phòng ban</label>
-            <input list="deptList" name="department" value="${u.department}" ${ro}/>
-            <datalist id="deptList">
-              <option value="IT"/>
-              <option value="QA"/>
-              <option value="SALE"/>
-            </datalist>
+            <select name="departmentId" ${!canEdit ? 'disabled' : ''}>
+              <option value="">— Không đổi / Trống —</option>
+              <c:forEach var="d" items="${depts}">
+                <option value="${d.id}" ${u.departmentId == d.id ? 'selected' : ''}>
+                  ${d.code} - ${d.name}
+                </option>
+              </c:forEach>
+            </select>
           </div>
 
+          <!-- ROLE (FK role_id) -->
           <div>
-            <label>Chức vụ</label>
+            <label>Chức vụ (role)</label>
             <c:choose>
               <c:when test="${canEdit && isAdmin}">
-                <select name="role">
-                  <c:set var="r" value="${u.role}"/>
-                  <c:forEach var="opt" items="${fn:split('ADMIN,DIV_LEADER,TEAM_LEAD,QA_LEAD,STAFF', ',')}">
-                    <option value="${opt}" ${opt == r ? 'selected' : ''}>${opt}</option>
+                <select name="roleId">
+                  <option value="">— Không đổi / Trống —</option>
+                  <c:forEach var="r" items="${roles}">
+                    <option value="${r.id}" ${u.roleId == r.id ? 'selected' : ''}>
+                      ${r.code} - ${r.name}
+                    </option>
                   </c:forEach>
                 </select>
               </c:when>
@@ -155,6 +153,28 @@
             </c:choose>
           </div>
 
+          <!-- DIVISION (FK) -->
+          <div>
+            <label>Khối/Division</label>
+            <select name="divisionId" ${!canEdit ? 'disabled' : ''}>
+              <option value="">— Không đổi / Trống —</option>
+              <c:forEach var="dv" items="${divisions}">
+                <option value="${dv.id}" ${u.divisionId == dv.id ? 'selected' : ''}>${dv.name}</option>
+              </c:forEach>
+            </select>
+          </div>
+
+          <!-- MANAGER (FK Users.id) -->
+          <div>
+            <label>Quản lý trực tiếp</label>
+            <select name="managerId" ${!canEdit ? 'disabled' : ''}>
+              <option value="">— Không đổi / Trống —</option>
+              <c:forEach var="m" items="${managers}">
+                <option value="${m.id}" ${u.managerId == m.id ? 'selected' : ''}>${m.fullName}</option>
+              </c:forEach>
+            </select>
+          </div>
+
           <div class="full">
             <label>Địa chỉ</label>
             <input name="address" value="${u.address}" ${ro}/>
@@ -162,7 +182,6 @@
 
           <div>
             <label>Ngày sinh</label>
-            <%-- Hỗ trợ cả LocalDate (in thẳng) và java.util.Date qua u.birthdayDate --%>
             <c:choose>
               <c:when test="${not empty u.birthday}">
                 <input type="date" name="birthday" value="${u.birthday}" ${ro}/>
@@ -175,6 +194,11 @@
                 <input type="date" name="birthday" ${ro}/>
               </c:otherwise>
             </c:choose>
+          </div>
+
+          <div>
+            <label>Lương cơ bản (decimal)</label>
+            <input type="number" step="0.01" name="salary" value="${u.salary}" ${ro}/>
           </div>
 
           <div>
@@ -210,8 +234,9 @@
       </div>
     </div>
 
-    <div class="note muted" style="margin:18px 4px">
-      Lưu ý: Trang này khớp với bảng <code>dbo.Users</code> (các cột: <code>username</code>, <code>full_name</code>, <code>role</code>, <code>department</code>, <code>status</code>, <code>email</code>, <code>phone</code>, <code>address</code>, <code>birthday</code>, <code>bio</code>, <code>avatar_url</code>, <code>created_at</code>, <code>updated_at</code>).
+    <div class="muted" style="margin:18px 4px">
+      Lưu ý: Form gửi các trường FK: <code>departmentId</code>, <code>roleId</code>, <code>divisionId</code>, <code>managerId</code>.
+      Nếu để trống sẽ không cập nhật cột đó (DAO cần dùng <i>CASE WHEN ? IS NULL THEN col ELSE ? END</i> hoặc bỏ set cột).
     </div>
   </main>
 

@@ -39,7 +39,7 @@ public class AuthServlet extends HttpServlet {
             String fallback = req.getContextPath()
                     + (isOffboardingRole(cu != null ? cu.getRole() : null)
                        ? "/user/home"
-                       : "/request/list");
+                       : "/portal");
             resp.sendRedirect(fallback);
             return;
         }
@@ -103,7 +103,7 @@ public class AuthServlet extends HttpServlet {
 
                 // 6) Điều hướng an toàn theo role (tôn trọng 'next' nếu hợp lệ)
                 String fallback = req.getContextPath()
-                        + (isOffboardingRole(u.getRole()) ? "/user/home" : "/request/list");
+                        + (isOffboardingRole(u.getRole()) ? "/user/home" : "/portal");
                 String target = safeNext(req, next, fallback);
                 resp.sendRedirect(target);
                 return;
@@ -151,7 +151,7 @@ public class AuthServlet extends HttpServlet {
         return true;
     }
 
-    /** Nhóm role “hạn chế” → rơi về /user/home thay vì /request/list */
+    /** Nhóm role “hạn chế” → rơi về /user/home thay vì /portal */
     private boolean isOffboardingRole(String role) {
         if (role == null) return false;
         switch (role) {
@@ -167,7 +167,7 @@ public class AuthServlet extends HttpServlet {
     /** Chỉ cho phép redirect về URL nội bộ; với fallback tùy role. */
     private String safeNext(HttpServletRequest req, String next, String fallback) {
         String fb = (fallback == null || fallback.isBlank())
-                ? (req.getContextPath() + "/request/list")
+                ? (req.getContextPath() + "/portal")
                 : fallback;
 
         if (next == null || next.isBlank()) return fb;
@@ -191,6 +191,6 @@ public class AuthServlet extends HttpServlet {
 
     /** Bản giữ tương thích nếu nơi khác còn gọi. */
     private String safeNext(HttpServletRequest req, String next) {
-        return safeNext(req, next, req.getContextPath() + "/request/list");
+        return safeNext(req, next, req.getContextPath() + "/portal");
     }
 }

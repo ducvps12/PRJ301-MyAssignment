@@ -67,7 +67,7 @@ public class LoginServlet extends HttpServlet {
 
             // Điều hướng
             String ctx = req.getContextPath();
-            String dest = u.canAccessAdminDashboard() ? "/admin" : "/request/list";
+            String dest = u.canAccessAdminDashboard() ? "/admin" : "/portal";
             resp.sendRedirect(ctx + dest);
             return;
 

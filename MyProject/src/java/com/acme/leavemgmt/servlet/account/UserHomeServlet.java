@@ -15,9 +15,7 @@ import java.util.*;
 
 /**
  * UserHomeServlet – Trang Home sau đăng nhập (phiên người dùng).
- * Nạp các số liệu cá nhân: balance phép, counts, đơn gần đây,
- * inbox duyệt (nếu có quyền), thông báo, sparkline series, và
- * xuất các cờ capability theo role/trạng thái để JSP ẩn/khóa UI.
+ * Nạp số liệu cá nhân + capability theo role/trạng thái và xuất ra cho JSP.
  *
  * URL: /user/home
  * LƯU Ý: Nếu web.xml có metadata-complete="true" thì cần mapping trong web.xml.
@@ -31,6 +29,7 @@ public class UserHomeServlet extends HttpServlet {
     // private final NotificationService  notiService     = new NotificationService();
     // private final ApprovalService      approvalService = new ApprovalService();
     // private final LeaveBalanceService  balanceService  = new LeaveBalanceService();
+    // private final AttendanceService    attendanceService = new AttendanceService();
 
     /** Nhóm role có quyền duyệt. */
     private static final Set<String> APPROVER_ROLES = setOf(
@@ -66,19 +65,19 @@ public class UserHomeServlet extends HttpServlet {
         // 2) Thời điểm hiện tại (cho UI)
         req.setAttribute("now", new Date());
 
-        // 3) SUY LUẬN TRẠNG THÁI & QUYỀN từ role (không phụ thuộc field lạ)
+        // 3) SUY LUẬN TRẠNG THÁI & QUYỀN từ role
         String role = safeUpper(current.getRole());
-        String accState = deriveAccountState(role, current); // "", "LIMITED", hoặc 1 trong RESTRICTED_STATES
+        String accState = deriveAccountState(role, current); // "", "LIMITED", hoặc giá trị trong RESTRICTED_STATES
 
-        boolean canApprove = APPROVER_ROLES.contains(role);
-        boolean isRestricted = RESTRICTED_STATES.contains(accState); // tạm ngưng/khóa/offboarding/under_review
+        boolean canApprove   = APPROVER_ROLES.contains(role);
+        boolean isRestricted = RESTRICTED_STATES.contains(accState);
         boolean isLimited    = "LIMITED".equals(accState) || LIMITED_ROLES.contains(role);
 
-        // Capability cho JSP
-        boolean canCreateRequest   = !isRestricted;                // restricted thì không được tạo
-        boolean canViewMyRequests  = !"TERMINATED".equals(accState); // terminated thì không cho xem gì
-        boolean canUseAgenda       = ! "TERMINATED".equals(accState);
-        boolean canReceiveNoti     = ! "TERMINATED".equals(accState);
+        // Capability cho JSP (portal có thể ẩn/khóa tùy biến)
+        boolean canCreateRequest  = !isRestricted;
+        boolean canViewMyRequests = !"TERMINATED".equals(accState);
+        boolean canUseAgenda      = !"TERMINATED".equals(accState);
+        boolean canReceiveNoti    = !"TERMINATED".equals(accState);
 
         req.setAttribute("accState", accState);
         req.setAttribute("canApprove", canApprove);
@@ -87,89 +86,75 @@ public class UserHomeServlet extends HttpServlet {
         req.setAttribute("cap_canAgenda",  canUseAgenda);
         req.setAttribute("cap_canNoti",    canReceiveNoti);
 
-        // 4) Thông tin liên hệ (từ web.xml <context-param> nếu có, hoặc fallback)
-     String contactHR = getServletContext().getInitParameter("hr.email");
-if (contactHR == null || contactHR.trim().isEmpty()) {
-    contactHR = "hradmin@company.com";
-}
-String contactMgr = currentEmailOfManager(current);
-if (contactMgr == null || contactMgr.trim().isEmpty()) {
-    contactMgr = "manager@company.com";
-}
-req.setAttribute("contactHR", contactHR);
-req.setAttribute("contactMgr", contactMgr);
+        // 4) Thông tin liên hệ (init-param hoặc fallback)
+        String contactHR = getServletContext().getInitParameter("hr.email");
+        if (contactHR == null || contactHR.trim().isEmpty()) contactHR = "hradmin@company.com";
+        String contactMgr = currentEmailOfManager(current);
+        if (contactMgr == null || contactMgr.trim().isEmpty()) contactMgr = "manager@company.com";
+        req.setAttribute("contactHR", contactHR);
+        req.setAttribute("contactMgr", contactMgr);
 
-
-        // 5) Balance phép năm (AL) – thay bằng gọi service thực của bạn
-        Map<String, Double> myBalances = new HashMap<>();
+        // 5) KPI cho khung trên cùng của Portal Home (khớp JSP: requestScope.kpi)
+        Map<String, Object> kpi = new LinkedHashMap<>();
         try {
-            // Double al = balanceService.getAnnualLeaveRemaining(current.getId());
-            // myBalances.put("AL", al != null ? al : 0d);
-            myBalances.put("AL", 8.5d); // DEMO fallback
-        } catch (Exception ex) {
-            myBalances.put("AL", 0d);
+            // Double al  = balanceService.getAnnualLeaveRemaining(current.getId());
+            // int pending = requestService.countByUserAndStatus(current.getId(), "PENDING");
+            // int lateM   = attendanceService.countLateInMonth(current.getId(), YearMonth.now());
+            // double net  = payrollService.estimateNet(current.getId(), YearMonth.now());
+            kpi.put("AL", 8.0);          // phép năm còn
+            kpi.put("pending", 2);       // đơn đang chờ
+            kpi.put("late", 1);          // đi muộn (tháng)
+            kpi.put("net", 15_000_000d); // ước tính net (double)
+        } catch (Exception ignore) {
+            kpi.put("AL", 0d); kpi.put("pending", 0); kpi.put("late", 0); kpi.put("net", 0d);
         }
-        req.setAttribute("myBalances", myBalances);
+        req.setAttribute("kpi", kpi);
 
-        // 6) Đếm đơn theo trạng thái – thay bằng DAO thực tế
-        int myPendingCount = 0, myApprovedCount = 0, myRejectedCount = 0;
-        try {
-            // myPendingCount  = requestService.countByUserAndStatus(current.getId(), "pending");
-            // myApprovedCount = requestService.countByUserAndStatus(current.getId(), "approved");
-            // myRejectedCount = requestService.countByUserAndStatus(current.getId(), "rejected");
-            myPendingCount = 2; myApprovedCount = 12; myRejectedCount = 1; // DEMO
-        } catch (Exception ignore) { }
-        req.setAttribute("myPendingCount",  myPendingCount);
-        req.setAttribute("myApprovedCount", myApprovedCount);
-        req.setAttribute("myRejectedCount", myRejectedCount);
-
-        // 7) Đơn gần đây của chính user – thay bằng DAO thực tế
-        List<Map<String, Object>> recentRequests = new ArrayList<>();
+        // 6) Hoạt động gần đây (khớp JSP: recentActivities  gồm {type,title,time(Date)})
+        List<Map<String, Object>> recentActivities = new ArrayList<>();
         if (canViewMyRequests) {
-            try {
-                // List<Request> list = requestService.listRecentByUser(current.getId(), 10);
-                // req.setAttribute("recentRequests", list);
-                recentRequests.add(makeReq(1012, "Annual", daysAgo(2), daysAgo(1), "PENDING"));
-                recentRequests.add(makeReq(1007, "Sick",   daysAgo(10), daysAgo(9), "APPROVED"));
-                recentRequests.add(makeReq(1003, "WFH",    daysAgo(15), daysAgo(15), "REJECTED"));
-            } catch (Exception ignore) { }
+            recentActivities.add(act("REQUEST", "Đơn nghỉ #1029 - PENDING", daysAgo(0)));
         }
-        req.setAttribute("recentRequests", recentRequests);
+        // có thể bơm thêm: "CHECKIN", "CHECKOUT", "PAYROLL", ...
+        req.setAttribute("recentActivities", recentActivities);
 
-        // 8) Inbox duyệt nếu có quyền
-        List<Map<String, Object>> approveInbox = new ArrayList<>();
-        if (canApprove && !isRestricted) {
-            try {
-                // approveInbox = approvalService.listInbox(current.getId(), 10);
-                approveInbox.add(makeInbox(2011, "Nguyễn Văn A", daysAgo(1), daysAgo(1)));
-                approveInbox.add(makeInbox(2008, "Trần Thị B",   daysAgo(3), daysAgo(2)));
-            } catch (Exception ignore) { }
+        // 7) Trạng thái chấm công hôm nay + quyền bấm (khớp JSP: todaySummary, clock)
+        // TODO: thay bằng attendanceService lấy thật theo user & ngày hiện tại
+        String todaySummary = "08:32 → — (muộn 2')";
+        Map<String, Object> clock = new HashMap<>();
+        clock.put("inAllowed",  Boolean.TRUE);   // cho bấm check-in?
+        clock.put("outAllowed", Boolean.FALSE);  // cho bấm check-out?
+        req.setAttribute("todaySummary", todaySummary);
+        req.setAttribute("clock", clock);
+
+        // 8) CSRF token (Portal Home đang post /attendance/clock cần biến 'csrf')
+        String csrf = (String) req.getSession().getAttribute("csrf_token");
+        if (csrf == null) {
+            csrf = UUID.randomUUID().toString();
+            req.getSession().setAttribute("csrf_token", csrf);
         }
-        req.setAttribute("approveInbox", approveInbox);
+        req.setAttribute("csrf", csrf);
 
-        // 9) Thông báo gần đây – thay bằng DAO thực tế
-        List<Map<String, Object>> notifications = new ArrayList<>();
-        if (canReceiveNoti) {
-            try {
-                // notifications = notiService.listForUser(current.getId(), 10);
-                notifications.add(makeNoti("Cập nhật chính sách", "Tăng hạn mức WFH 2 ngày/tháng.", null));
-                notifications.add(makeNoti("Bảo trì hệ thống", "Gián đoạn 15 phút lúc 22:00 đêm nay.", null));
-            } catch (Exception ignore) { }
-        }
-        req.setAttribute("notifications", notifications);
+        // 9) (Tuỳ chọn) dữ liệu khác nếu bạn muốn dùng ở nơi khác trong UI
+        //    – giữ lại mấy biến cũ để không ảnh hưởng các trang bạn đã code
+        req.setAttribute("myBalances", Map.of("AL", ((Number)kpi.get("AL")).doubleValue()));
+        req.setAttribute("myPendingCount",  ((Number)kpi.get("pending")).intValue());
+        req.setAttribute("myApprovedCount", 12);  // DEMO
+        req.setAttribute("myRejectedCount", 1);   // DEMO
+        req.setAttribute("approveInbox",   canApprove && !isRestricted ? demoInbox() : List.of());
+        req.setAttribute("notifications",  canReceiveNoti ? demoNoti() : List.of());
+        req.setAttribute("serverBalanceSeries", toJsArray(new double[]{8,7.5,7,7,6.5,6,5,4.5,4,3.5,3,2.5}));
 
-        // 10) Dữ liệu sparkline cho chart nhỏ – mảng 12 điểm
-        double[] balanceSeries = new double[]{8,7.5,7,7,6.5,6,5,4.5,4,3.5,3,2.5};
-        req.setAttribute("serverBalanceSeries", toJsArray(balanceSeries));
-
-        // 11) Forward sang JSP user
-        req.getRequestDispatcher("/WEB-INF/views/user/home.jsp").forward(req, resp);
+        // 10) Forward sang JSP
+        //    Nếu bạn dùng Portal riêng: "/WEB-INF/views/portal/home.jsp"
+        //    Ở đây để đúng tên file bạn đã show screenshot:
+        req.getRequestDispatcher("/WEB-INF/views/portal/home.jsp").forward(req, resp);
     }
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
-        // Home không có form post; đưa về GET cho đơn giản.
+        // Home không có form post; đưa về GET
         doGet(req, resp);
     }
 
@@ -189,19 +174,12 @@ req.setAttribute("contactMgr", contactMgr);
     private static String deriveAccountState(String role, User u) {
         if (RESTRICTED_STATES.contains(role)) return role;
         if (LIMITED_ROLES.contains(role))     return "LIMITED";
-
-        // Nếu model User có field status (1=active), ta bảo vệ thêm:
+        // Nếu model User có field status (1=active), bảo vệ thêm:
         try {
             Integer st = (Integer) User.class.getMethod("getStatus").invoke(u);
             if (st != null && st != 1) return "SUSPENDED";
         } catch (Exception ignore) { /* không có getter hoặc khác kiểu -> bỏ qua */ }
-
         return "";
-    }
-
-    private static boolean hasApproveRole(User u) {
-        String r = safeUpper(u == null ? null : u.getRole());
-        return APPROVER_ROLES.contains(r);
     }
 
     private static Date daysAgo(int d) {
@@ -210,17 +188,22 @@ req.setAttribute("contactMgr", contactMgr);
         return c.getTime();
     }
 
-    private static Map<String, Object> makeReq(int id, String type, Date from, Date to, String status) {
+    private static Map<String, Object> act(String type, String title, Date time) {
         Map<String, Object> m = new HashMap<>();
-        m.put("id", id);
-        m.put("type", type);
-        m.put("startDate", from);
-        m.put("endDate", to);
-        m.put("status", status);
+        m.put("type",  type);
+        m.put("title", title);
+        m.put("time",  time);   // CHÚ Ý: để đúng kiểu Date cho fmt:formatDate bên JSP
         return m;
     }
 
-    private static Map<String, Object> makeInbox(int id, String userName, Date from, Date to) {
+    private static List<Map<String, Object>> demoInbox() {
+        List<Map<String, Object>> l = new ArrayList<>();
+        l.add(inbox(2011, "Nguyễn Văn A", daysAgo(1), daysAgo(1)));
+        l.add(inbox(2008, "Trần Thị B",   daysAgo(3), daysAgo(2)));
+        return l;
+    }
+
+    private static Map<String, Object> inbox(int id, String userName, Date from, Date to) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", id);
         m.put("userName", userName);
@@ -229,10 +212,17 @@ req.setAttribute("contactMgr", contactMgr);
         return m;
     }
 
-    private static Map<String, Object> makeNoti(String title, String body, String linkUrl) {
+    private static List<Map<String, Object>> demoNoti() {
+        List<Map<String, Object>> l = new ArrayList<>();
+        l.add(noti("Cập nhật chính sách", "Tăng hạn mức WFH 2 ngày/tháng.", null));
+        l.add(noti("Bảo trì hệ thống", "Gián đoạn 15 phút lúc 22:00 đêm nay.", null));
+        return l;
+    }
+
+    private static Map<String, Object> noti(String title, String body, String linkUrl) {
         Map<String, Object> m = new HashMap<>();
         m.put("title", title);
-        m.put("body", body);
+        m.put("body",  body);
         m.put("linkUrl", linkUrl);
         m.put("createdAt", new Date());
         return m;

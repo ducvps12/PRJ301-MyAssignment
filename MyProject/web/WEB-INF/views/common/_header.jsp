@@ -1,23 +1,27 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ include file="/WEB-INF/views/common/_taglibs.jsp" %>
 <c:set var="cp" value="${pageContext.request.contextPath}" />
+<c:set var="portalUrl" value="${empty sessionScope.portalUrl ? cp.concat('/portal') : sessionScope.portalUrl}" />
+
 <%
   String _uri = request.getRequestURI();
   request.setAttribute("_uri", _uri);
 %>
 
-<!-- Skip link cho a11y -->
+<!-- Skip link -->
 <a class="skip-link" href="#main" tabindex="0">Bỏ qua tới nội dung</a>
 
 <header class="app-header pro" role="banner">
   <div class="wrap">
-    <!-- Left: Brand + Hamburger -->
+    <!-- Left: Brand + Back to Portal + Hamburger -->
     <div class="left">
-      <a class="brand" href="${cp}/" aria-label="Trang chủ">
+      <a class="brand" href="${portalUrl}" aria-label="Quay về Portal" data-no-overlay="true">
         <img src="https://i.imgur.com/tumQO30.png" alt="LeaveMgmt"/>
         <span class="brand-text">LeaveMgmt</span>
       </a>
-      <button id="btnHamburger" class="hamburger" aria-label="Mở menu" aria-expanded="false" aria-controls="mainnav" data-no-overlay="true">
+      <a class="back-portal" href="${portalUrl}" data-no-overlay="true" title="Quay về Portal (Ctrl+Shift+P)">← Portal</a>
+      <button id="btnHamburger" class="hamburger" aria-label="Mở menu"
+              aria-expanded="false" aria-controls="mainnav" data-no-overlay="true">
         <span></span><span></span><span></span>
       </button>
     </div>
@@ -25,10 +29,12 @@
     <!-- Main Nav -->
     <nav id="mainnav" class="nav" role="navigation" aria-label="Chính">
       <c:set var="u"          value="${sessionScope.currentUser}" />
-      <c:set var="isAdmin"    value="${u != null && u.role == 'ADMIN'}" />
-      <c:set var="isDivLead"  value="${u != null && u.role == 'DIV_LEADER'}" />
-      <c:set var="isTeamLead" value="${u != null && u.role == 'TEAM_LEAD'}" />
-      <c:set var="isHR"       value="${u != null && u.role == 'HR'}" />
+      <c:set var="role"       value="${empty u ? '' : (empty u.role ? (empty u.roleCode ? '' : u.roleCode) : u.role)}"/>
+      <c:set var="R"          value="${fn:toUpperCase(fn:trim(role))}"/>
+      <c:set var="isAdmin"    value="${R=='ADMIN' or R=='SYS_ADMIN'}" />
+      <c:set var="isDivLead"  value="${R=='DIV_LEADER'}" />
+      <c:set var="isTeamLead" value="${R=='TEAM_LEAD'}" />
+      <c:set var="isHR"       value="${R=='HR_ADMIN' or R=='HR'}" />
       <c:set var="isLead"     value="${isDivLead or isTeamLead}" />
 
       <a href="${cp}/request/list"
@@ -100,13 +106,15 @@
               <c:otherwise>U</c:otherwise>
             </c:choose>
           </span>
-          <span class="name"><c:out value="${u != null ? u.displayName : 'Guest'}"/></span>
+          <span class="name"><c:out value="${u != null ? (empty u.displayName ? u.fullName : u.displayName) : 'Guest'}"/></span>
           <svg class="chev" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5 7l5 6 5-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
         <div id="usermenu" class="menu" hidden>
           <a href="${cp}/profile">Thông tin cá nhân</a>
           <a href="${cp}/activity">Lịch sử hoạt động</a>
           <a href="${cp}/account/change-password">Thay đổi mật khẩu</a>
+          <div class="divider"></div>
+          <a href="${portalUrl}" data-no-overlay="true">← Quay về Portal</a>
           <div class="divider"></div>
           <a class="logout" href="${cp}/logout">Đăng xuất</a>
         </div>
@@ -116,7 +124,7 @@
   <div class="active-underline" aria-hidden="true"></div>
 </header>
 
-<!-- Overlay: ẩn mặc định, chỉ hiện khi điều hướng -->
+<!-- Overlay khi điều hướng -->
 <div id="appOverlay" class="loading-overlay" aria-hidden="true" aria-live="polite">
   <div class="spinner" role="status" aria-label="Đang tải..."></div>
 </div>
@@ -149,12 +157,23 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
 @media (min-width:640px){ .app-header.pro .brand img{height:var(--logo-md)} .app-header.pro .brand-text{font-size:19px} }
 @media (min-width:992px){ .app-header.pro .brand img{height:var(--logo-lg)} .app-header.pro .brand-text{font-size:20px} }
 
+/* Back to portal pill */
+.back-portal{
+  display:inline-block;margin-left:4px;padding:6px 10px;border:1px solid var(--bd);
+  border-radius:999px;background:var(--card);color:var(--pri-2);text-decoration:none;line-height:1;
+  transition:.18s;font-weight:600;
+}
+.back-portal:hover{ background:color-mix(in srgb,var(--card) 90%,#000 10%) }
+.back-portal:focus-visible{ outline:2px solid var(--ring); outline-offset:2px }
+
+/* Hamburger */
 .hamburger{display:none;flex-direction:column;gap:4px;border:1px solid var(--bd);border-radius:10px;padding:7px 9px;background:transparent;color:var(--pri);cursor:pointer;transition:.2s}
 .hamburger span{width:18px;height:2px;background:currentColor;display:block;border-radius:1px;transition:transform .2s,opacity .2s}
 .hamburger.active span:nth-child(1){transform:translateY(6px) rotate(45deg)}
 .hamburger.active span:nth-child(2){opacity:0}
 .hamburger.active span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 
+/* Nav */
 .nav{display:flex;align-items:center;gap:4px;flex:1;min-width:0;position:relative}
 .nav .navlink{display:inline-block;padding:8px 12px;border:1px solid transparent;border-radius:999px;text-decoration:none;color:var(--pri-2);background:transparent;transition:.18s;line-height:1;white-space:nowrap}
 .nav .navlink:hover{background:var(--pri);color:#fff}
@@ -193,16 +212,17 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
 .name{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chev{opacity:.6}
 
-/* Overlay (ẩn mặc định – chỉ hiện khi .show) */
+/* Overlay */
 .loading-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(255,255,255,.92);z-index:9999;opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease}
 .loading-overlay.show{display:flex;opacity:1;visibility:visible}
 .spinner{width:44px;height:44px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:#111827;animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-color-scheme: dark){ .loading-overlay{background:rgba(0,0,0,.6)} .spinner{border-color:#2b3138;border-top-color:#e5e7eb} }
 
-/* Mobile */
+/* Responsive */
 @media (max-width:1100px){ .quicksearch{display:none} }
 @media (max-width:880px){
+  .back-portal{display:none;}
   .hamburger{display:flex}
   .nav{position:fixed;inset:auto 0 0 0;top:56px;display:none;flex-direction:column;gap:10px;background:var(--card);border-top:1px solid var(--bd);padding:12px 16px;box-shadow:0 16px 40px rgba(0,0,0,.16)}
   .nav.show{display:flex}
@@ -226,11 +246,11 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
   const qs       = $('#headSearch');
   const qsClear  = document.querySelector('.qs-clear');
 
-  /* Header shadow when scrolled */
+  /* Header shadow */
   const onScrollShadow = () => { (window.scrollY > 6 ? header.classList.add('scrolled') : header.classList.remove('scrolled')); };
   onScrollShadow(); window.addEventListener('scroll', onScrollShadow);
 
-  /* Active underline positioner (đã có guard) */
+  /* Active underline */
   function placeUnderline() {
     if (!underline || !header) return;
     const active = document.querySelector('.nav .navlink.active');
@@ -241,9 +261,7 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
     underline.style.left   = (r.left - hw.left + 16) + 'px';
     underline.style.bottom = '0';
   }
-  placeUnderline();
-  window.addEventListener('resize', placeUnderline);
-  setTimeout(placeUnderline, 0);
+  placeUnderline(); window.addEventListener('resize', placeUnderline); setTimeout(placeUnderline, 0);
 
   /* Hamburger / mobile menu */
   if (hamb && nav) {
@@ -258,7 +276,7 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
     window.addEventListener('resize', ()=>{ if (window.innerWidth>880) toggle(false); });
   }
 
-  /* Dropdown helpers */
+  /* Dropdown helper */
   function dropdown(btn, menu){
     if (!btn || !menu) return;
     const open = () => { menu.hidden=false; btn.setAttribute('aria-expanded','true'); };
@@ -275,7 +293,7 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
   const markBtn = menuNotif ? menuNotif.querySelector('.markread') : null;
   if (markBtn && btnNotif) markBtn.addEventListener('click', ()=>{ const dot = btnNotif.querySelector('.badge'); if (dot) dot.remove(); notifDD && notifDD.close(); });
 
-  /* Overlay helpers: chỉ hiện khi điều hướng thật */
+  /* Overlay khi điều hướng nội bộ */
   const showOverlay = ()=> overlay && overlay.classList.add('show');
   const hideOverlay = ()=> overlay && overlay.classList.remove('show');
   window.addEventListener('pageshow', hideOverlay);
@@ -302,12 +320,13 @@ body{font:14px/1.5 system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:va
     showOverlay();
   }, true);
 
-  /* Quick Search: phím tắt, nút clear */
+  /* Quick Search & hotkeys */
   if (qs) {
     document.addEventListener('keydown', (e)=>{
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') { e.preventDefault(); qs.focus(); qs.select(); }
       if (e.key.toLowerCase()==='r' && e.ctrlKey) location.href='${cp}/request/list';
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='p') { e.preventDefault(); location.href='${portalUrl}'; }
     });
     qs.addEventListener('input', ()=>{ if (qsClear) qsClear.hidden = !qs.value; });
     if (qsClear){ qsClear.addEventListener('click', ()=>{ qs.value=''; qs.focus(); qsClear.hidden=true; }); }

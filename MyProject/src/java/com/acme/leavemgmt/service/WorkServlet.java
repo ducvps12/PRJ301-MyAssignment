@@ -4,30 +4,37 @@ import com.acme.leavemgmt.dao.WorkDAO;
 import com.acme.leavemgmt.model.WorkReport;
 
 import javax.sql.DataSource;
+import javax.naming.InitialContext;                 // Fallback JNDI
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.*;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 
-/**
- * WorkServlet – trang Báo cáo công việc & Todo
- * URL:
- *   GET  /work           -> danh sách báo cáo (filter: q/type/from/to)
- *   GET  /work/todos     -> danh sách việc cần làm (status/assignee)
- *   POST /work           -> act=saveReport | addTodo | setTodoStatus
- */
-@WebServlet(urlPatterns = {"/work", "/work/todos"})
+@WebServlet(urlPatterns = {"/work/*"})
 public class WorkServlet extends HttpServlet {
+
+    private static final long serialVersionUID = 1L;
 
     private WorkDAO dao;
 
     @Override
     public void init() {
+        // 1) Lấy DS từ ServletContext (đã gắn bởi AppInit) ; 2) Fallback JNDI nếu thiếu
         DataSource ds = (DataSource) getServletContext().getAttribute("DS");
+        if (ds == null) {
+            try {
+                ds = (DataSource) new InitialContext().lookup("java:comp/env/jdbc/LeaveDB");
+                if (ds != null) getServletContext().setAttribute("DS", ds);
+            } catch (Exception e) {
+                throw new IllegalStateException("DataSource 'DS' not found. Configure JNDI jdbc/LeaveDB.", e);
+            }
+        }
         dao = new WorkDAO(ds);
     }
 
@@ -35,13 +42,19 @@ public class WorkServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
+        // Charset chuẩn
+        req.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
+
+        // Với mapping "/work/*": null => "/work", "/todos" => "/work/todos"
         String path = n(req.getPathInfo());
         int page = intParam(req, "page", 1);
 
         if ("/todos".equals(path)) {
-            String status = n(req.getParameter("status"));               // OPEN/DOING/DONE/...
+            String status = n(req.getParameter("status"));        // OPEN/DOING/DONE/...
             Long assignee = asLong(req.getParameter("assignee"));
             var rows = dao.listTodos(status, assignee, page, 20);
+
             req.setAttribute("todos", rows);
             req.setAttribute("status", status);
             req.setAttribute("assignee", assignee);
@@ -51,7 +64,7 @@ public class WorkServlet extends HttpServlet {
         }
 
         // --------- Reports ----------
-        String type = n(req.getParameter("type"));                       // DAILY/WEEKLY/...
+        String type = n(req.getParameter("type"));                // DAILY/WEEKLY/...
         LocalDate from = optDate(req, "from", LocalDate.now().minusDays(14));
         LocalDate to   = optDate(req, "to",   LocalDate.now());
 
@@ -71,7 +84,10 @@ public class WorkServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws IOException, ServletException {
 
-        // Nếu có middleware CSRF riêng, gọi tại đây: Csrf.verify(req);
+        req.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
+
+        // Nếu có middleware CSRF riêng: Csrf.verify(req);
 
         String act = n(req.getParameter("act"));
         Object me = req.getSession().getAttribute("currentUser");
@@ -79,26 +95,19 @@ public class WorkServlet extends HttpServlet {
 
         switch (act) {
             case "saveReport": {
-                // Form gợi ý: date, type, summary, blockers, planNext, hours(optional), tags(optional)
-                LocalDate date = optDate(req, "date", LocalDate.now());
-                String type = n(req.getParameter("type"));
-                String summary = n(req.getParameter("summary"));
-                String blockers = n(req.getParameter("blockers"));
-                String planNext = n(req.getParameter("planNext"));
-                String tags = n(req.getParameter("tags"));
-                String hoursStr = n(req.getParameter("hours"));
+                LocalDate date   = optDate(req, "date", LocalDate.now());
+                String type      = n(req.getParameter("type"));
+                String summary   = n(req.getParameter("summary"));
+                String blockers  = n(req.getParameter("blockers"));
+                String planNext  = n(req.getParameter("planNext"));
+                String tags      = n(req.getParameter("tags"));
+                String hoursStr  = n(req.getParameter("hours"));
 
-                // Gộp nội dung đẹp để lưu 1 field content
-                String content = """
-                        ## Summary
-                        %s
-
-                        ## Blockers
-                        %s
-
-                        ## Plan next
-                        %s
-                        """.formatted(emptyDash(summary), emptyDash(blockers), emptyDash(planNext)).trim();
+                String content = (
+                        "## Summary\n"  + emptyDash(summary)  + "\n\n" +
+                        "## Blockers\n" + emptyDash(blockers) + "\n\n" +
+                        "## Plan next\n" + emptyDash(planNext)
+                ).trim();
 
                 var wr = new WorkReport();
                 wr.setUserId(userId);
@@ -107,7 +116,7 @@ public class WorkServlet extends HttpServlet {
                 wr.setContent(content);
                 wr.setTags(tags.isBlank() ? null : tags);
                 if (!hoursStr.isBlank()) {
-                    try { wr.setHours(new java.math.BigDecimal(hoursStr)); } catch (Exception ignore) { /* optional */ }
+                    try { wr.setHours(new java.math.BigDecimal(hoursStr)); } catch (Exception ignore) {}
                 }
 
                 dao.upsertReport(wr);
@@ -116,12 +125,13 @@ public class WorkServlet extends HttpServlet {
             }
 
             case "addTodo": {
-                String title = n(req.getParameter("title"));
-                Long assignee = asLong(req.getParameter("assignee"));
-                LocalDate due = optDate(req, "due", null);
-                String priority = n(req.getParameter("priority"));      // LOW/NORMAL/HIGH
-                String tags = n(req.getParameter("tags"));
-                String note = n(req.getParameter("note"));
+                String title    = n(req.getParameter("title"));
+                Long assignee   = asLong(req.getParameter("assignee"));
+                LocalDate due   = optDate(req, "due", null);
+                String priority = n(req.getParameter("priority"));     // LOW/NORMAL/HIGH
+                String tags     = n(req.getParameter("tags"));
+                String note     = n(req.getParameter("note"));
+
                 dao.addTodo(title, assignee, due, priority, tags, note);
                 resp.sendRedirect(req.getContextPath()+"/work/todos");
                 return;
@@ -131,22 +141,27 @@ public class WorkServlet extends HttpServlet {
                 long id = longParam(req, "id");
                 String status = n(req.getParameter("status"));
                 dao.setTodoStatus(id, status);
-                resp.sendRedirect(req.getHeader("Referer"));
+                resp.sendRedirect(safeBack(req, req.getContextPath()+"/work/todos"));
                 return;
             }
-        }
 
-        // fallback
-        resp.sendRedirect(req.getHeader("Referer"));
+            default:
+                resp.sendRedirect(safeBack(req, req.getContextPath()+"/work"));
+        }
     }
 
     /* ===================== Helpers ===================== */
 
-    private static String n(String s){ return s==null ? "" : s.trim(); }
+    private static String n(String s){ return s == null ? "" : s.trim(); }
 
     private static String enc(String s){
-        try { return java.net.URLEncoder.encode(n(s), java.nio.charset.StandardCharsets.UTF_8); }
+        try { return java.net.URLEncoder.encode(n(s), StandardCharsets.UTF_8); }
         catch (Exception e) { return n(s); }
+    }
+
+    private static String safeBack(HttpServletRequest r, String def){
+        String ref = n(r.getHeader("Referer"));
+        return ref.isEmpty() ? def : ref;
     }
 
     private static int intParam(HttpServletRequest r, String k, int d){
@@ -182,5 +197,5 @@ public class WorkServlet extends HttpServlet {
         return s.isEmpty() ? null : Long.valueOf(s);
     }
 
-    private static String emptyDash(String s){ return s==null || s.isBlank() ? "—" : s; }
+    private static String emptyDash(String s){ return (s == null || s.isBlank()) ? "—" : s; }
 }

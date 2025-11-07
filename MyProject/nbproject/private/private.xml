@@ -3,14 +3,57 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/account/ForgotPasswordServlet.java</file>
-            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/tags/admin/layout.tag</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/ReportsDAO.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/recruit/reports.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/web.xml</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/recruit/todos.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/admin/ReportsServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/portal/_portal_sidebar.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/auth/login.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/service/WorkServlet.java</file>
             <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/index.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/recruit/apps.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/layouts/portal_layout.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/dataSource.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/web/admin/DbAdminServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/model/AttendanceRecord.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/model/PayrollItem.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/portal/_portal_footer.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/LoginServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/account/PortalHomeServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/attendance/list.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/common/_user_header.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/web/auth/AuthServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/payroll/list.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/model/WorkReport.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/audit/_audit_header.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/AttendanceDAO.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/portal/_portal_header.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/PayrollDAO.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/admin/audit.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/service/PayrollServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/service/DivisionService.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/common/_header.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/service/RecruitServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/recruit/work.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/model/WorkTodo.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/audit/_audit_footer.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/reports/requests_daily.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/WorkDAO.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/account/ForgotPasswordServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/audit/_audit_sidebar.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/layouts/admin_layout.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/home/overview.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/reports/reports_home.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/tags/admin/layout.tag</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/recruit/jobs.jsp</file>
             <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/admin/div_dashboard_body.jsp</file>
             <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/common/_admin_header.jsp</file>
-            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/layouts/admin_layout.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/service/AttendanceServlet.java</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/dao/RecruitDAO.java</file>
             <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/src/java/com/acme/leavemgmt/servlet/account/UserHomeServlet.java</file>
             <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/common/_admin_sidebar.jsp</file>
+            <file>file:/D:/Kỳ%204/PRJ301/asm/prj-w10/PRJ301-MyAssignment/MyProject/web/WEB-INF/views/portal/home.jsp</file>
         </group>
     </open-files>
 </project-private>
