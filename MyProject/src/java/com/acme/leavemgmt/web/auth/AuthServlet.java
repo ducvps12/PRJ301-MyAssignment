@@ -2,7 +2,9 @@ package com.acme.leavemgmt.web.auth;
 
 import com.acme.leavemgmt.dao.UserDAO;
 import com.acme.leavemgmt.model.User;
+
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 
 import java.io.IOException;
@@ -11,7 +13,8 @@ import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.UUID;
 
-// @WebServlet(urlPatterns = {"/login"})  // dùng annotation nếu không khai báo trong web.xml
+// Nếu đã cấu hình trong web.xml thì giữ nguyên; nếu chưa có thì mở dòng dưới:
+// @WebServlet(urlPatterns = {"/login"})
 public class AuthServlet extends HttpServlet {
 
     private static final String VIEW_LOGIN = "/WEB-INF/views/auth/login.jsp";
@@ -30,9 +33,14 @@ public class AuthServlet extends HttpServlet {
             return;
         }
 
-        // Đã đăng nhập -> về home
+        // Đã đăng nhập -> điều hướng theo role
         if (s != null && s.getAttribute("currentUser") != null) {
-            resp.sendRedirect(req.getContextPath() + "/user/home");
+            User cu = (User) s.getAttribute("currentUser");
+            String fallback = req.getContextPath()
+                    + (isOffboardingRole(cu != null ? cu.getRole() : null)
+                       ? "/user/home"
+                       : "/request/list");
+            resp.sendRedirect(fallback);
             return;
         }
 
@@ -76,10 +84,10 @@ public class AuthServlet extends HttpServlet {
         }
 
         try {
-            // 3) Xác thực (ghi chú: sau này chuyển sang BCrypt/Argon2)
+            // 3) Xác thực (TODO: chuyển sang BCrypt/Argon2)
             User u = userDAO.findByUsernameAndPassword(username, password);
 
-if (u != null && u.isActive()) {
+            if (isLoginAllowed(u)) {
                 // 4) Chống session fixation
                 HttpSession old = req.getSession(false);
                 if (old != null) old.invalidate();
@@ -88,19 +96,20 @@ if (u != null && u.isActive()) {
 
                 // 5) Lưu user vào session (đúng key mà RoleFilter dùng)
                 s.setAttribute("currentUser", u);
-                // (tuỳ chọn: lưu thêm hay không)
                 s.setAttribute("userId", u.getId());
                 s.setAttribute("fullName", u.getFullName());
                 s.setAttribute("role", u.getRole());
                 s.setAttribute("department", u.getDepartment());
 
-                // 6) Điều hướng an toàn
-                String target = safeNext(req, next);
+                // 6) Điều hướng an toàn theo role (tôn trọng 'next' nếu hợp lệ)
+                String fallback = req.getContextPath()
+                        + (isOffboardingRole(u.getRole()) ? "/user/home" : "/request/list");
+                String target = safeNext(req, next, fallback);
                 resp.sendRedirect(target);
                 return;
             }
 
-            // Sai TK/MK
+            // Sai TK/MK hoặc không được phép đăng nhập
             req.setAttribute("error", "Sai tài khoản hoặc mật khẩu.");
             req.setAttribute("username", username);
             req.setAttribute("next", next);
@@ -131,23 +140,57 @@ if (u != null && u.isActive()) {
         return token != null && token.equals(formToken);
     }
 
-    /** Chỉ cho phép redirect về URL nội bộ trong cùng context; mặc định /request/list */
-    private String safeNext(HttpServletRequest req, String next) {
-        String fallback = req.getContextPath() + "/request/list";
-        if (next == null || next.isBlank()) return fallback;
+    /** Cho phép đăng nhập khi user tồn tại, active và không thuộc nhóm bị khóa hẳn. */
+    private boolean isLoginAllowed(User u) {
+        if (u == null) return false;
+        // isActive() của bạn có thể đã cover status; ta vẫn chặn thêm các role "khóa hẳn"
+        if (!u.isActive()) return false;
+        String role = u.getRole();
+        // SUSPENDED & TERMINATED: không cho login
+        if ("SUSPENDED".equals(role) || "TERMINATED".equals(role)) return false;
+        return true;
+    }
+
+    /** Nhóm role “hạn chế” → rơi về /user/home thay vì /request/list */
+    private boolean isOffboardingRole(String role) {
+        if (role == null) return false;
+        switch (role) {
+            case "OFFBOARDING":
+            case "UNDER_REVIEW":
+            case "PROBATION":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Chỉ cho phép redirect về URL nội bộ; với fallback tùy role. */
+    private String safeNext(HttpServletRequest req, String next, String fallback) {
+        String fb = (fallback == null || fallback.isBlank())
+                ? (req.getContextPath() + "/request/list")
+                : fallback;
+
+        if (next == null || next.isBlank()) return fb;
 
         // Không cho absolute URL (tránh open redirect)
         try {
             URI u = new URI(next);
-            if (u.isAbsolute()) return fallback;
+            if (u.isAbsolute()) return fb;
         } catch (URISyntaxException e) {
-            return fallback;
+            return fb;
         }
 
-        // Chỉ cho phép đường dẫn bắt đầu bằng contextPath hoặc là path tương đối
+        // Chỉ chấp nhận đường dẫn nội bộ
         if (next.startsWith(req.getContextPath()) || next.startsWith("/")) {
-            return next.startsWith("/") ? (req.getContextPath() + next) : (req.getContextPath() + "/" + next);
+            return next.startsWith("/")
+                    ? (req.getContextPath() + next)
+                    : (req.getContextPath() + "/" + next);
         }
-        return fallback;
+        return fb;
+    }
+
+    /** Bản giữ tương thích nếu nơi khác còn gọi. */
+    private String safeNext(HttpServletRequest req, String next) {
+        return safeNext(req, next, req.getContextPath() + "/request/list");
     }
 }

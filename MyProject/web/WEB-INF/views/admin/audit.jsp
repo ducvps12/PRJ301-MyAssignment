@@ -6,26 +6,20 @@
   <meta charset="UTF-8">
   <title>Audit Log · LeaveMgmt</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <%-- css chung (nếu có) --%>
   <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/admin.css?v=9"/>
 
   <style>
-    /* ===== Layout fix: bù header (fixed) + sidebar (fixed) ===== */
     :root{ --h:64px; --sbw:220px; }
-    body.admin .admin-main{
-      margin:0; padding:16px;
-      padding-top:calc(var(--h) + 12px);
-      margin-left:var(--sbw);
-    }
+    body.admin .admin-main{ margin:0; padding:16px; padding-top:calc(var(--h) + 12px); margin-left:var(--sbw); }
     @media(max-width:1100px){ body.admin .admin-main{ margin-left:0 } }
 
-    /* ===== Audit page ===== */
     .audit h2{margin:0 0 .8rem}
     .audit .filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end}
     .audit .filters>*{display:flex;flex-direction:column}
     .audit .filters .grow{flex:1 1 280px}
-    .audit .filters input,.audit .filters select{
-      height:38px;padding:0 .6rem;border:1px solid var(--bd);border-radius:.6rem;background:#fff
-    }
+    .audit .filters input,.audit .filters select{height:38px;padding:0 .6rem;border:1px solid var(--bd);border-radius:.6rem;background:#fff}
     .audit .filters label{font-size:12px;color:var(--muted);margin-bottom:4px}
     .audit .filters .btn{height:38px;line-height:38px;padding:0 14px}
 
@@ -42,21 +36,21 @@
     .audit tbody tr:hover{background:rgba(148,163,184,.08)}
     .nowrap{white-space:nowrap}
     .ua{max-width:520px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-
     .chip{display:inline-block;padding:.18rem .55rem;border-radius:999px;font-size:12px;border:1px solid #e5e7eb}
     .chip.OK{background:#ecfdf5;border-color:#bbf7d0}
   </style>
 </head>
 <body class="admin">
 
-  <!-- Header & Sidebar (fixed) -->
-  <jsp:include page="/WEB-INF/views/common/_admin_header.jsp"/>
+  <%-- Header & Sidebar RIÊNG CHO AUDIT --%>
+  <jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
+  <jsp:include page="/WEB-INF/views/audit/_audit_header.jsp" />
 
   <main class="admin-main">
     <div class="container audit">
       <h2>Audit Log</h2>
 
-      <!-- ===== Filters ===== -->
+      <%-- Filters --%>
       <form class="filters" method="get" action="">
         <input type="hidden" name="csrf" value="${sessionScope.csrf}"/>
 
@@ -99,7 +93,7 @@
         <div><a class="btn" href="${csvUrl}" title="Xuất CSV">↯ Export CSV</a></div>
       </form>
 
-      <!-- ===== Toolbar ===== -->
+      <%-- Toolbar --%>
       <div class="toolbar">
         <div class="muted">
           Tổng: <strong>${empty result ? 0 : (empty result.totalItems ? result.total : result.totalItems)}</strong> bản ghi
@@ -122,7 +116,7 @@
         </div>
       </div>
 
-      <!-- ===== Table ===== -->
+      <%-- Bảng --%>
       <div class="table">
         <table>
           <thead>
@@ -144,20 +138,17 @@
             <c:otherwise>
               <c:forEach items="${result.items}" var="a">
                 <tr>
-<td class="muted nowrap">
-  <c:choose>
-    <c:when test="${a.createdAt ne null}">
-      <fmt:formatDate value="${a.createdAt}" pattern="yyyy-MM-dd'T'HH:mm:ss" var="iso"/>
-      <time datetime="${iso}">
-        <fmt:formatDate value="${a.createdAt}" pattern="yyyy-MM-dd HH:mm:ss"/>
-      </time>
-    </c:when>
-    <c:otherwise>-</c:otherwise>
-  </c:choose>
-</td>
-
-
-
+                  <td class="muted nowrap">
+                    <c:choose>
+                      <c:when test="${a.createdAt ne null}">
+                        <fmt:formatDate value="${a.createdAt}" pattern="yyyy-MM-dd'T'HH:mm:ss" var="iso"/>
+                        <time datetime="${iso}">
+                          <fmt:formatDate value="${a.createdAt}" pattern="yyyy-MM-dd HH:mm:ss"/>
+                        </time>
+                      </c:when>
+                      <c:otherwise>-</c:otherwise>
+                    </c:choose>
+                  </td>
                   <td class="nowrap"><c:out value="${a.userName}"/> <span class="muted">(#<c:out value="${a.userId}"/>)</span></td>
                   <td><span class="chip OK"><c:out value="${a.action}"/></span></td>
                   <td class="nowrap">
@@ -177,43 +168,30 @@
           </tbody>
         </table>
       </div>
+
+      <jsp:include page="/WEB-INF/views/audit/_audit_footer.jsp"/>
     </div>
   </main>
 
   <script>
-    // Tự đo header/aside để set --h/--sbw (né hard-code)
-    (function(){
-      const h  = document.querySelector('.ad-header, .admin-header')?.offsetHeight || 64;
-      const sb = document.querySelector('.ad-sidebar, .admin-sidebar, #sidebar')?.offsetWidth || 220;
-      document.documentElement.style.setProperty('--h',  h + 'px');
-      document.documentElement.style.setProperty('--sbw', sb + 'px');
-    })();
-
-    // Lưu nhớ input size
+    // lưu size
     (function(){
       const key='audit_size'; const box=document.getElementById('sizeBox');
-      if(!box) return;
-      if(!box.value && localStorage.getItem(key)) box.value = localStorage.getItem(key);
+      if(!box) return; if(!box.value && localStorage.getItem(key)) box.value = localStorage.getItem(key);
       box.addEventListener('change', ()=> localStorage.setItem(key, box.value));
     })();
 
-    // Copy nhanh User-Agent (và có thể dùng cho ô khác nếu thêm data-copy)
+    // copy UA
     document.body.addEventListener('click', async (e)=>{
-      const btn = e.target.closest('button[data-copy]');
-      if(!btn) return;
-      const sel = btn.getAttribute('data-copy');
-      const el  = btn.closest('td')?.querySelector(sel);
-      if(el){
-        try{ await navigator.clipboard.writeText(el.textContent.trim()); btn.textContent='Copied'; setTimeout(()=>btn.textContent='Copy',1200); }
-        catch{ alert('Không thể copy'); }
-      }
+      const btn=e.target.closest('button[data-copy]'); if(!btn) return;
+      const el=btn.closest('td')?.querySelector(btn.getAttribute('data-copy'));
+      if(el){ try{ await navigator.clipboard.writeText(el.textContent.trim()); btn.textContent='Copied'; setTimeout(()=>btn.textContent='Copy',1200);}catch{} }
     });
 
-    // Phím tắt: / để focus ô tìm nhanh
-    document.addEventListener('keydown', (e)=>{
+    // phím tắt
+    addEventListener('keydown', e=>{
       if(e.key==='/' && !/input|textarea/i.test(e.target.tagName)){
-        e.preventDefault();
-        const q=document.querySelector('input[name="q"]'); q?.focus();
+        e.preventDefault(); document.querySelector('input[name="q"]')?.focus();
       }
     });
   </script>

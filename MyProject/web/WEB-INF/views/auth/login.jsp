@@ -1,6 +1,7 @@
 
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
+
 <jsp:useBean id="now" class="java.util.Date" />
 <!DOCTYPE html>
 <html lang="vi" data-theme="${sessionScope.theme != null ? sessionScope.theme : 'auto'}">

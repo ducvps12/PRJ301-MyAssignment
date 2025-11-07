@@ -1,14 +1,21 @@
-<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
-<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+<%@ include file="/WEB-INF/views/common/_taglibs.jsp" %>
+<%-- cần có fn ở _taglibs.jsp:
+    <%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+--%>
 
-<<c:set var="hasUser"   value="${not empty u}"/>
-<c:set var="isActive"  value="${hasUser and (u.status == 1 
-                       or u.status eq '1' 
-                       or u.status eq 'ACTIVE' 
-                       or u.employmentStatusCode eq 'ACTIVE')}"/>
-<c:set var="roleSafe"  value="${hasUser and not empty u.role ? u.role : ''}"/>
+<c:set var="hasUser" value="${not empty u}" />
 
+<c:set var="empCode"
+       value="${ hasUser and not empty u.employmentStatusCode
+                ? fn:toUpperCase(u.employmentStatusCode) : '' }" />
+
+<c:set var="isActive"
+       value="${ hasUser and (
+                   (not empty u.status and (u.status == 1 or u.status eq '1'))
+                   or (empCode eq 'ACTIVE')
+                ) }" />
+
+<c:set var="roleSafe" value="${ hasUser and not empty u.role ? u.role : '' }" />
 
 <%
     // user được servlet đẩy sang
