@@ -16,7 +16,10 @@
   .chips{display:inline-flex;gap:6px;flex-wrap:wrap}
   .chip{padding:.2rem .55rem;border-radius:999px;border:1px solid #e5e7eb;background:#f8fafc;font-size:12px}
   .actions form{display:inline}
-  .right{float:right}
+  .right{margin-left:auto}
+  .pager{display:flex;gap:6px;justify-content:flex-end;margin-top:10px}
+  .pager a{padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:#111;background:#fff}
+  .pager .on{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
 </style>
 
 <main class="wrap">
@@ -85,8 +88,8 @@
               </td>
               <td>
                 <c:choose>
-                  <c:when test="${not empty t.dueDate}">
-                    <fmt:formatDate value="${t.dueDate}" pattern="yyyy-MM-dd"/>
+                  <c:when test="${not empty t.due_date || not empty t.dueDate}">
+                    <fmt:formatDate value="${empty t.dueDate ? t.due_date : t.dueDate}" pattern="yyyy-MM-dd"/>
                   </c:when>
                   <c:otherwise><span class="muted">—</span></c:otherwise>
                 </c:choose>
@@ -94,7 +97,6 @@
               <td>${empty t.priority ? 'NORMAL' : t.priority}</td>
               <td>${empty t.status ? 'OPEN' : t.status}</td>
               <td class="actions">
-                <!-- set status buttons -> POST /work -->
                 <form method="post" action="${cp}/work" style="margin-right:6px">
                   <input type="hidden" name="act" value="setTodoStatus"/>
                   <input type="hidden" name="id" value="${t.id}"/>
@@ -118,6 +120,17 @@
           </c:forEach>
           </tbody>
         </table>
+
+        <!-- Pager cơ bản -->
+        <c:if test="${not empty page}">
+          <div class="pager">
+            <c:set var="p" value="${page}"/>
+            <c:set var="prev" value="${p-1 < 1 ? 1 : p-1}"/>
+            <a href="${cp}/work/todos?status=${status}&assignee=${assignee}&page=${prev}">« Trước</a>
+            <a class="on" href="${cp}/work/todos?status=${status}&assignee=${assignee}&page=${p}">${p}</a>
+            <a href="${cp}/work/todos?status=${status}&assignee=${assignee}&page=${p+1}">Sau »</a>
+          </div>
+        </c:if>
       </c:otherwise>
     </c:choose>
   </div>
@@ -125,7 +138,7 @@
   <!-- Add new -->
   <div class="panel">
     <h3 style="margin-bottom:8px">Add Todo</h3>
-    <form method="post" action="${cp}/work">
+    <form method="post" action="${cp}/work" class="js-post">
       <input type="hidden" name="act" value="addTodo"/>
 
       <div class="toolbar" style="align-items:flex-start">
@@ -169,3 +182,13 @@
     </form>
   </div>
 </main>
+
+<script>
+  // Chặn double-submit cho các form POST
+  document.querySelectorAll('form.js-post, td.actions form').forEach(f=>{
+    f.addEventListener('submit', e=>{
+      const btn = f.querySelector('button[type=submit]');
+      if (btn){ btn.disabled = true; btn.textContent = 'Đang gửi...'; }
+    });
+  });
+</script>

@@ -1,21 +1,32 @@
-
-
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
+<%@taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core"%>
+<%@taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt"%>
+<%@taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions"%>
 
 <%@ include file="/WEB-INF/views/common/_admin_header.jsp" %>
-  <jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
+<jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp"/>
 
-<c:set var="ctx" value="${pageContext.request.contextPath}" />
+<c:set var="ctx" value="${pageContext.request.contextPath}"/>
 
-<!-- Gán mặc định -->
+<!-- Defaults -->
 <c:if test="${empty f_status}">
-  <c:set var="f_status" value="ACTIVE" />
+  <c:set var="f_status" value="ACTIVE"/>
 </c:if>
 <c:if test="${empty mode}">
-  <c:set var="mode" value="create" />
+  <c:set var="mode" value="create"/>
 </c:if>
-<c:set var="isEdit" value="${mode eq 'edit'}" />
+<c:set var="isEdit" value="${mode eq 'edit'}"/>
+
+<!-- Chuẩn hoá URL action -->
+<c:choose>
+  <c:when test="${isEdit}">
+    <c:set var="actionUrl" value="${ctx}/admin/users/edit?id=${f_id}"/>
+  </c:when>
+  <c:otherwise>
+    <c:set var="actionUrl" value="${ctx}/admin/users/create"/>
+  </c:otherwise>
+</c:choose>
 
 <div class="main-body">
   <div class="container">
@@ -36,7 +47,7 @@
 
     <!-- Thông báo lỗi -->
     <c:if test="${not empty errors}">
-      <div class="alert alert-danger" role="alert">
+      <div class="alert alert-danger" role="alert" aria-live="polite">
         <strong>Có lỗi xảy ra:</strong>
         <ul style="margin:8px 0 0 0;padding-left:20px">
           <c:forEach var="e" items="${errors}">
@@ -47,11 +58,7 @@
     </c:if>
 
     <!-- FORM -->
-    <form method="post"
-          action="${ctx}/admin/users/${isEdit ? 'edit' : 'create'}${isEdit ? '?id=' : ''}${isEdit ? f_id : ''}"
-          class="card shadow-sm"
-          style="padding:24px;max-width:800px">
-
+    <form method="post" action="${actionUrl}" class="card shadow-sm" style="padding:24px;max-width:840px">
       <input type="hidden" name="csrf" value="${csrf}"/>
       <c:if test="${isEdit}">
         <input type="hidden" name="id" value="${f_id}"/>
@@ -60,81 +67,59 @@
       <div class="row">
         <div class="col-md-6 mb-3">
           <label class="form-label fw-semibold">Họ tên <span class="text-danger">*</span></label>
-          <input type="text"
-                 name="full_name"
-                 class="form-control"
+          <input type="text" name="full_name" class="form-control"
                  value="<c:out value='${f_full_name}'/>"
-                 placeholder="VD: Ms QA Lead"
-                 required>
+                 placeholder="VD: Ms QA Lead" required>
         </div>
         <div class="col-md-6 mb-3">
           <label class="form-label fw-semibold">Email</label>
-          <input type="email"
-                 name="email"
-                 class="form-control"
-                 value="<c:out value='${f_email}'/>"
-                 placeholder="name@company.com">
+          <input type="email" name="email" class="form-control"
+                 value="<c:out value='${f_email}'/>" placeholder="name@company.com">
         </div>
       </div>
 
       <div class="row">
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Số điện thoại</label>
-          <input type="tel"
-                 name="phone"
-                 class="form-control"
-                 value="<c:out value='${f_phone}'/>"
-                 placeholder="0912345678">
+          <input type="tel" name="phone" class="form-control"
+                 value="<c:out value='${f_phone}'/>" placeholder="0912345678">
         </div>
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Ngày sinh</label>
-          <input type="date"
-                 name="birthday"
-                 class="form-control"
+          <input type="date" name="birthday" class="form-control"
                  value="<c:out value='${f_birthday}'/>">
         </div>
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Địa chỉ</label>
-          <input type="text"
-                 name="address"
-                 class="form-control"
-                 value="<c:out value='${f_address}'/>"
-                 placeholder="Số nhà, đường, quận/huyện...">
+          <input type="text" name="address" class="form-control"
+                 value="<c:out value='${f_address}'/>" placeholder="Số nhà, đường, quận/huyện...">
         </div>
       </div>
 
       <div class="row">
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Username <span class="text-danger">*</span></label>
-          <input type="text"
-                 name="username"
-                 class="form-control"
-                 value="<c:out value='${f_username}'/>"
-                 placeholder="qa.s1"
-                 ${isEdit ? 'readonly' : ''}
-                 required>
+          <input type="text" name="username" class="form-control" id="usernameInput"
+                 value="<c:out value='${f_username}'/>" placeholder="qa.s1" required
+                 <c:if test="${isEdit}">readonly="readonly"</c:if> >
           <c:if test="${isEdit}">
             <small class="text-muted">Username không thể thay đổi</small>
           </c:if>
         </div>
+
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">
             Mật khẩu <c:if test="${!isEdit}"><span class="text-danger">*</span></c:if>
           </label>
           <div class="password-wrapper">
-            <input type="password"
-                   name="password"
-                   id="passwordInput"
-                   class="form-control"
-                   ${isEdit ? '' : 'value="123456"'}
-                   placeholder="${isEdit ? 'Để trống nếu không đổi' : '123456'}"
-                   autocomplete="${isEdit ? 'new-password' : 'new-password'}">
+            <input type="password" name="password" id="passwordInput" class="form-control"
+                   <c:if test="${!isEdit}">value="123456"</c:if>
+                   placeholder="<c:out value='${isEdit ? "Để trống nếu không đổi" : "123456"}'/>"
+                   autocomplete="new-password">
             <button type="button" class="password-toggle" onclick="togglePassword()" aria-label="Hiện/ẩn mật khẩu">👁</button>
           </div>
           <div class="password-strength" id="passwordStrength" style="display:none">
-            <div class="strength-bar">
-              <div class="strength-fill" id="strengthFill"></div>
-            </div>
+            <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
             <small class="strength-text" id="strengthText"></small>
           </div>
           <small class="text-muted">
@@ -144,6 +129,7 @@
             </c:choose>
           </small>
         </div>
+
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Trạng thái</label>
           <select name="status" class="form-select">
@@ -164,6 +150,7 @@
             <option value="STAFF"      <c:if test="${f_role == 'STAFF' || empty f_role}">selected</c:if>>STAFF</option>
           </select>
         </div>
+
         <div class="col-md-4 mb-3">
           <label class="form-label fw-semibold">Phòng ban <span class="text-danger">*</span></label>
           <select name="department" class="form-select" required>
@@ -197,17 +184,14 @@
 (function() {
   // Auto gợi ý username theo họ tên (chỉ khi create)
   const full = document.querySelector('input[name="full_name"]');
-  const user = document.querySelector('input[name="username"]');
+  const user = document.getElementById('usernameInput');
   const isCreate = '${mode}' === 'create';
   if (full && user && isCreate) {
     full.addEventListener('input', function() {
       if (user.dataset.touched === '1') return;
-      const v = this.value
-        .trim()
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s]/g, "")
-        .replace(/\s+/g, '.');
+      const v = this.value.trim().toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+        .replace(/[^a-z0-9\s]/g,"").replace(/\s+/g,'.');
       user.value = v;
     });
     user.addEventListener('input', () => user.dataset.touched = '1');
@@ -218,43 +202,26 @@
   const pwdStrength = document.getElementById('passwordStrength');
   const strengthFill = document.getElementById('strengthFill');
   const strengthText = document.getElementById('strengthText');
-  
+
   if (pwdInput && pwdStrength) {
     pwdInput.addEventListener('input', function() {
-      const pwd = this.value;
-      if (!pwd || pwd.length === 0) {
-        pwdStrength.style.display = 'none';
-        return;
-      }
-      pwdStrength.style.display = 'block';
-      
-      let strength = 0;
-      let feedback = '';
-      
-      if (pwd.length >= 8) strength++;
-      if (pwd.length >= 12) strength++;
-      if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) strength++;
-      if (/\d/.test(pwd)) strength++;
-      if (/[^a-zA-Z0-9]/.test(pwd)) strength++;
-      
-      const percentage = (strength / 5) * 100;
-      strengthFill.style.width = percentage + '%';
-      
-      if (strength <= 2) {
-        strengthFill.style.background = '#ef4444';
-        feedback = 'Yếu';
-      } else if (strength === 3) {
-        strengthFill.style.background = '#f59e0b';
-        feedback = 'Trung bình';
-      } else if (strength === 4) {
-        strengthFill.style.background = '#3b82f6';
-        feedback = 'Mạnh';
-      } else {
-        strengthFill.style.background = '#22c55e';
-        feedback = 'Rất mạnh';
-      }
-      
-      strengthText.textContent = feedback;
+      const pwd = this.value || '';
+      if (!pwd) { pwdStrength.style.display='none'; return; }
+      pwdStrength.style.display='block';
+      let s = 0;
+      if (pwd.length >= 8) s++;
+      if (pwd.length >= 12) s++;
+      if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) s++;
+      if (/\d/.test(pwd)) s++;
+      if (/[^a-zA-Z0-9]/.test(pwd)) s++;
+      const pct = (s/5)*100;
+      strengthFill.style.width = pct + '%';
+      let label = 'Yếu', color = '#ef4444';
+      if (s===3) { label='Trung bình'; color='#f59e0b'; }
+      if (s===4) { label='Mạnh';       color='#3b82f6'; }
+      if (s===5) { label='Rất mạnh';   color='#22c55e'; }
+      strengthFill.style.background = color;
+      strengthText.textContent = label;
     });
   }
 
@@ -262,29 +229,21 @@
   window.togglePassword = function() {
     const input = document.getElementById('passwordInput');
     const btn = document.querySelector('.password-toggle');
-    if (input && btn) {
-      if (input.type === 'password') {
-        input.type = 'text';
-        btn.textContent = '🙈';
-      } else {
-        input.type = 'password';
-        btn.textContent = '👁';
-      }
-    }
+    if (!input || !btn) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁';
   };
 
-  // Form submission loading state
+  // Loading state
   const form = document.querySelector('form');
   const submitBtn = document.getElementById('submitBtn');
   if (form && submitBtn) {
     form.addEventListener('submit', function() {
-      const btnText = submitBtn.querySelector('.btn-text');
-      const btnSpinner = submitBtn.querySelector('.btn-spinner');
-      if (btnText && btnSpinner) {
-        btnText.style.display = 'none';
-        btnSpinner.style.display = 'inline';
-        submitBtn.disabled = true;
-      }
+      const t = submitBtn.querySelector('.btn-text');
+      const s = submitBtn.querySelector('.btn-spinner');
+      if (t && s) { t.style.display='none'; s.style.display='inline'; }
+      submitBtn.disabled = true;
     });
   }
 
@@ -292,174 +251,42 @@
   const emailInput = document.querySelector('input[name="email"]');
   if (emailInput) {
     emailInput.addEventListener('blur', function() {
-      const email = this.value.trim();
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        this.setCustomValidity('Email không hợp lệ');
-      } else {
-        this.setCustomValidity('');
-      }
+      const v = this.value.trim();
+      this.setCustomValidity(v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Email không hợp lệ' : '');
     });
   }
-
   const phoneInput = document.querySelector('input[name="phone"]');
   if (phoneInput) {
     phoneInput.addEventListener('blur', function() {
-      const phone = this.value.trim();
-      if (phone && !/^[0-9]{10,11}$/.test(phone)) {
-        this.setCustomValidity('Số điện thoại phải có 10-11 chữ số');
-      } else {
-        this.setCustomValidity('');
-      }
+      const v = this.value.trim();
+      this.setCustomValidity(v && !/^[0-9]{10,11}$/.test(v) ? 'Số điện thoại phải có 10-11 chữ số' : '');
     });
   }
 })();
 </script>
 
 <style>
-  .form-label {
-    font-weight: 600;
-    margin-bottom: 6px;
-    display: block;
-    color: var(--tx);
-  }
-  .form-control, .form-select {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--bd);
-    border-radius: 8px;
-    background: var(--card-2);
-    color: var(--tx);
-    font-size: 14px;
-  }
-  .form-control:focus, .form-select:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pri) 30%, transparent 70%);
-    border-color: var(--pri);
-  }
-  .form-control[readonly] {
-    background: color-mix(in oklab, var(--card-2) 70%, transparent 30%);
-    cursor: not-allowed;
-  }
-  .password-wrapper {
-    position: relative;
-  }
-  .password-toggle {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    font-size: 18px;
-    padding: 4px;
-    opacity: 0.7;
-  }
-  .password-toggle:hover {
-    opacity: 1;
-  }
-  .password-strength {
-    margin-top: 8px;
-  }
-  .strength-bar {
-    height: 4px;
-    background: var(--bd);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-bottom: 4px;
-  }
-  .strength-fill {
-    height: 100%;
-    transition: width 0.3s, background 0.3s;
-    border-radius: 2px;
-  }
-  .strength-text {
-    font-size: 11px;
-    color: var(--muted);
-    display: block;
-  }
-  .text-muted {
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 4px;
-    display: block;
-  }
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  .text-danger {
-    color: var(--err);
-  }
-  .alert-danger {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: var(--err);
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-  }
-  .btn {
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: 1px solid var(--bd);
-    background: var(--card-2);
-    color: var(--tx);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-  .btn-primary {
-    background: linear-gradient(180deg, var(--pri), var(--pri2));
-    border-color: transparent;
-    color: #fff;
-  }
-  .btn:hover {
-    filter: brightness(1.08);
-  }
-  .d-flex {
-    display: flex;
-  }
-  .gap-2 {
-    gap: 8px;
-  }
-  .mb-3 {
-    margin-bottom: 12px;
-  }
-  .mb-4 {
-    margin-bottom: 20px;
-  }
-  .mt-4 {
-    margin-top: 20px;
-  }
-  .page-header h2 {
-    font-size: 24px;
-    font-weight: 700;
-    margin: 0;
-  }
-  .row {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 12px;
-  }
-  .col-md-6 {
-    grid-column: span 6;
-  }
-  .col-md-4 {
-    grid-column: span 4;
-  }
-  @media (max-width: 768px) {
-    .row {
-      grid-template-columns: 1fr;
-    }
-    .col-md-6, .col-md-4 {
-      grid-column: span 1;
-    }
-  }
+  .form-label{font-weight:600;margin-bottom:6px;display:block;color:var(--tx)}
+  .form-control,.form-select{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card-2);color:var(--tx);font-size:14px}
+  .form-control:focus,.form-select:focus{outline:none;box-shadow:0 0 0 3px color-mix(in oklab, var(--pri) 30%, transparent 70%);border-color:var(--pri)}
+  .form-control[readonly]{background:color-mix(in oklab, var(--card-2) 70%, transparent 30%);cursor:not-allowed}
+  .password-wrapper{position:relative}
+  .password-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:transparent;border:0;cursor:pointer;font-size:18px;padding:4px;opacity:.7}
+  .password-toggle:hover{opacity:1}
+  .password-strength{margin-top:8px}
+  .strength-bar{height:4px;background:var(--bd);border-radius:2px;overflow:hidden;margin-bottom:4px}
+  .strength-fill{height:100%;transition:width .3s,background .3s;border-radius:2px}
+  .strength-text{font-size:11px;color:var(--muted);display:block}
+  .text-muted{color:var(--muted);font-size:12px;margin-top:4px;display:block}
+  .btn{padding:10px 20px;border-radius:8px;border:1px solid var(--bd);background:var(--card-2);color:var(--tx);text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px}
+  .btn-primary{background:linear-gradient(180deg,var(--pri),var(--pri2));border-color:transparent;color:#fff}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .d-flex{display:flex}.gap-2{gap:8px}.mb-3{margin-bottom:12px}.mb-4{margin-bottom:20px}.mt-4{margin-top:20px}
+  .page-header h2{font-size:24px;font-weight:700;margin:0}
+  .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  .col-md-6{grid-column:span 6}.col-md-4{grid-column:span 4}
+  @media (max-width:768px){.row{grid-template-columns:1fr}.col-md-6,.col-md-4{grid-column:span 1}}
 </style>
 
 <%@ include file="/WEB-INF/views/common/_admin_footer.jsp" %>
-

@@ -10,66 +10,49 @@ import java.util.Base64;
  * CSRF helper – session token + form/header verification.
  *
  * - Lưu token trong session (attr: "csrf").
- * - Client gửi lại qua input name "_csrf" hoặc header "X-CSRF-Token" (cũng chấp nhận "csrf_token").
- * - GET/HEAD/OPTIONS -> bỏ qua.
+ * - Client gửi lại qua input name "_csrf" hoặc header "X-CSRF-Token"
+ *   (cũng chấp nhận "csrf_token" / "csrf" và header "X-CSRF").
+ * - GET/HEAD/OPTIONS -> bỏ qua (always valid).
  */
 public final class Csrf {
 
-    // tên attr / param / header chuẩn
-    public static final String ATTR   = "csrf";
-    public static final String PARAM  = "_csrf";          // tên input mặc định
-    public static final String ALT_PARAM = "csrf_token";  // tên input mà nhiều form đang dùng
-    public static final String HEADER = "X-CSRF-Token";
+    // Tên attr / param / header chuẩn
+    public static final String ATTR        = "csrf";
+    public static final String PARAM       = "_csrf";          // tên input mặc định
+    public static final String ALT_PARAM   = "csrf_token";     // tên input phổ biến
+    public static final String ALT_PARAM_2 = "csrf";           // tên input legacy
+    public static final String HEADER      = "X-CSRF-Token";
+    public static final String ALT_HEADER  = "X-CSRF";
 
     private static final SecureRandom RNG = new SecureRandom();
 
-    /* ===================== Bổ sung triển khai 3 method còn thiếu ===================== */
+    /* ---------- Aliases & helpers public API ---------- */
 
-    /** Alias: kiểm tra hợp lệ của token cho request hiện tại. */
-    public static boolean isTokenValid(HttpServletRequest req) {
-        return valid(req);
-    }
+    /** Alias: kiểm tra hợp lệ token cho request hiện tại (true/false). */
+    public static boolean isTokenValid(HttpServletRequest req) { return valid(req); }
 
     /** Đảm bảo có token trong session và đẩy xuống request để JSP render. */
     public static void addToken(HttpServletRequest req) {
         String t = ensureToken(req.getSession());
-        // đặt nhiều key để các form cũ/mới đều tận dụng được
+        // expose theo nhiều key để các form cũ/mới đều dùng được
         req.setAttribute("csrf_token", t);
         req.setAttribute("_csrf", t);
-        // tuỳ chọn: nếu bạn muốn cũng expose theo tên ATTR
         req.setAttribute(ATTR, t);
     }
 
     /** Lấy/khởi tạo token hiện tại gắn với session của request. */
-    static String token(HttpServletRequest req) {
-        return ensureToken(req.getSession());
-    }
+    static String token(HttpServletRequest req) { return ensureToken(req.getSession()); }
 
-    /* =======================================================================
-       API public để servlet gọi
-       ======================================================================= */
+    /** Gọi ở doGet để chắc chắn view luôn có token render. */
+    public static void protect(HttpServletRequest req) { addToken(req); }
 
-    /** Gọi ở doGet: tương tự addToken, giữ lại để tương thích. */
-    public static void protect(HttpServletRequest req) {
-        HttpSession ses = req.getSession();
-        String token = ensureToken(ses);
-        req.setAttribute("csrf_token", token);
-        req.setAttribute("_csrf", token);
-    }
+    /** Trả về true/false khi kiểm tra token từ param/header. */
+    public static boolean verify(HttpServletRequest req) { return valid(req); }
 
-    /** Gọi ở doPost: kiểm tra token gửi lên. */
-    public static boolean verify(HttpServletRequest req) {
-        return valid(req);
-    }
+    /** Alias cũ, tương đương verify(req). */
+    public static boolean verifyToken(HttpServletRequest req) { return valid(req); }
 
-    /** Alias cho verify(...) để tương thích code cũ. */
-    public static boolean verifyToken(HttpServletRequest req) {
-        return valid(req);
-    }
-
-    /* =======================================================================
-       Core logic
-       ======================================================================= */
+    /* ========= Core logic ========= */
 
     /** Tạo token mới (32 bytes -> ~43 ký tự Base64 URL-safe, không padding). */
     private static String newToken() {
@@ -94,7 +77,7 @@ public final class Csrf {
         return (s == null) ? null : (String) s.getAttribute(ATTR);
     }
 
-    /** Xoay token mới (khuyến nghị gọi sau login/logout/đổi quyền). */
+    /** Xoay token mới (gọi sau login/logout/đổi quyền). */
     public static void rotate(HttpSession s) {
         if (s != null) s.setAttribute(ATTR, newToken());
     }
@@ -102,8 +85,7 @@ public final class Csrf {
     /**
      * Kiểm tra CSRF cho request.
      * - Với GET/HEAD/OPTIONS: luôn true.
-     * - Với method khác: so sánh token session với form param "_csrf" hoặc "csrf_token"
-     *   hoặc header "X-CSRF-Token".
+     * - Với method khác: so sánh token session với form param hoặc header.
      */
     public static boolean valid(HttpServletRequest req) {
         String m = req.getMethod();
@@ -116,26 +98,61 @@ public final class Csrf {
         String provided = firstNonEmpty(
                 req.getParameter(PARAM),          // _csrf
                 req.getParameter(ALT_PARAM),      // csrf_token
-                req.getHeader(HEADER)             // X-CSRF-Token
+                req.getParameter(ALT_PARAM_2),    // csrf (legacy)
+                req.getHeader(HEADER),            // X-CSRF-Token
+                req.getHeader(ALT_HEADER)         // X-CSRF
         );
         if (provided == null) return false;
 
         return constantTimeEquals(expected, provided);
     }
 
-    /* ===== helpers ===== */
+    /* ===== Implement các method còn thiếu (compat) ===== */
+
+    /** Compat: alias cho valid(req). */
+    public static boolean validate(HttpServletRequest req) {
+        return valid(req);
+    }
+
+    /**
+     * Kiểm tra với token truyền vào sẵn:
+     * - Nếu method safe -> return (không ném).
+     * - Nếu token null/rỗng -> fallback đọc từ param/header.
+     * - Nếu sai -> ném SecurityException (để servlet/bộ lọc bắt và trả 403).
+     */
+    public static void verify(HttpServletRequest req, String token) {
+        if (isSafeMethod(req.getMethod())) return; // không yêu cầu CSRF cho GET/HEAD/OPTIONS
+
+        HttpSession session = req.getSession(false);
+        String expected = getToken(session);
+        if (expected == null || expected.isEmpty()) {
+            throw new SecurityException("Missing CSRF session token");
+        }
+
+        String provided = (token != null && !token.isEmpty()) ? token : firstNonEmpty(
+                req.getParameter(PARAM),
+                req.getParameter(ALT_PARAM),
+                req.getParameter(ALT_PARAM_2),
+                req.getHeader(HEADER),
+                req.getHeader(ALT_HEADER)
+        );
+
+        if (provided == null || !constantTimeEquals(expected, provided)) {
+            throw new SecurityException("Invalid CSRF token");
+        }
+    }
+
+    /* ===== internal helpers ===== */
 
     private static boolean isSafeMethod(String m) {
         return "GET".equalsIgnoreCase(m)
-                || "HEAD".equalsIgnoreCase(m)
-                || "OPTIONS".equalsIgnoreCase(m);
+            || "HEAD".equalsIgnoreCase(m)
+            || "OPTIONS".equalsIgnoreCase(m);
     }
 
     private static String firstNonEmpty(String... arr) {
         if (arr == null) return null;
-        for (String s : arr) {
-            if (s != null && !s.isEmpty()) return s;
-        }
+        for (String s : arr) if (s != null && !s.isEmpty()) return s;
         return null;
     }
 
@@ -150,10 +167,6 @@ public final class Csrf {
             diff |= (ca ^ cb);
         }
         return diff == 0;
-    }
-
-    public static boolean validate(HttpServletRequest req) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
     private Csrf() {}

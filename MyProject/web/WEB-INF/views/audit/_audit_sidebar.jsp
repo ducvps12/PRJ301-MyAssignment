@@ -28,7 +28,7 @@
 <aside class="au-sb" id="auditSidebar" aria-label="Audit navigation">
   <div class="brand">
     <div class="meta">
-      <b>Audit</b>
+      <b>LM</b>
       <small>Role: <c:out value="${R != '' ? R : 'GUEST'}"/></small>
     </div>
     <div>
@@ -37,7 +37,7 @@
   </div>
 
   <nav>
-    <div class="sec">Audit</div>
+    <div class="sec">LM</div>
     <a href="${cp}/admin/audit" class="active">Nhật ký hệ thống</a>
     <c:if test="${isAdmin}">
       <a href="${cp}/admin/reports">Bộ báo cáo</a>

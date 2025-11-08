@@ -11,7 +11,7 @@ public class PayrollDAO {
     private final DataSource ds;
     public PayrollDAO(DataSource ds) { this.ds = ds; }
 
-    // ======================= Model =======================
+    /* ======================= Model ======================= */
     public static class PayrollItem {
         public Long id;
         public Long runId;
@@ -29,37 +29,37 @@ public class PayrollDAO {
         public String note;
         public LocalDateTime updatedAt;
 
-        // getters (tiện cho JSP)
-        public Long getUserId(){ return userId; }
+        // getters
+        public Long getId()            { return id; }
+        public Long getRunId()         { return runId; }
+        public Long getUserId()        { return userId; }
         public BigDecimal getBaseSalary(){ return baseSalary; }
         public BigDecimal getAllowance(){ return allowance; }
-        public BigDecimal getOtPay(){ return otPay; }
-        public BigDecimal getBonus(){ return bonus; }
-        public BigDecimal getPenalty(){ return penalty; }
+        public BigDecimal getOtPay()   { return otPay; }
+        public BigDecimal getBonus()   { return bonus; }
+        public BigDecimal getPenalty() { return penalty; }
         public BigDecimal getInsurance(){ return insurance; }
-        public BigDecimal getTax(){ return tax; }
-        public BigDecimal getNetPay(){ return netPay; }
-        public String getNote(){ return note; }
-        public Long getRunId(){ return runId; }
-        public Long getId(){ return id; }
+        public BigDecimal getTax()     { return tax; }
+        public BigDecimal getNetPay()  { return netPay; }
+        public String getNote()        { return note; }
         public LocalDateTime getUpdatedAt(){ return updatedAt; }
 
         // setters
-        public void setRunId(long runId)          { this.runId = runId; }
-        public void setRunId(Long runId)          { this.runId = runId; }
-        public void setUserId(Long userId)        { this.userId = userId; }
-        public void setBaseSalary(BigDecimal v)   { this.baseSalary = v == null ? BigDecimal.ZERO : v; }
-        public void setAllowance(BigDecimal v)    { this.allowance  = v == null ? BigDecimal.ZERO : v; }
-        public void setOtPay(BigDecimal v)        { this.otPay      = v == null ? BigDecimal.ZERO : v; }
-        public void setBonus(BigDecimal v)        { this.bonus      = v == null ? BigDecimal.ZERO : v; }
-        public void setPenalty(BigDecimal v)      { this.penalty    = v == null ? BigDecimal.ZERO : v; }
-        public void setInsurance(BigDecimal v)    { this.insurance  = v == null ? BigDecimal.ZERO : v; }
-        public void setTax(BigDecimal v)          { this.tax        = v == null ? BigDecimal.ZERO : v; }
-        public void setNetPay(BigDecimal v)       { this.netPay     = v == null ? BigDecimal.ZERO : v; }
-        public void setNote(String note)          { this.note = (note == null || note.isBlank()) ? null : note.trim(); }
+        public void setRunId(long runId)        { this.runId = runId; }
+        public void setRunId(Long runId)        { this.runId = runId; }
+        public void setUserId(Long userId)      { this.userId = userId; }
+        public void setBaseSalary(BigDecimal v) { this.baseSalary = v == null ? BigDecimal.ZERO : v; }
+        public void setAllowance(BigDecimal v)  { this.allowance  = v == null ? BigDecimal.ZERO : v; }
+        public void setOtPay(BigDecimal v)      { this.otPay      = v == null ? BigDecimal.ZERO : v; }
+        public void setBonus(BigDecimal v)      { this.bonus      = v == null ? BigDecimal.ZERO : v; }
+        public void setPenalty(BigDecimal v)    { this.penalty    = v == null ? BigDecimal.ZERO : v; }
+        public void setInsurance(BigDecimal v)  { this.insurance  = v == null ? BigDecimal.ZERO : v; }
+        public void setTax(BigDecimal v)        { this.tax        = v == null ? BigDecimal.ZERO : v; }
+        public void setNetPay(BigDecimal v)     { this.netPay     = v == null ? BigDecimal.ZERO : v; }
+        public void setNote(String note)        { this.note = (note == null || note.isBlank()) ? null : note.trim(); }
     }
 
-    // ======================= Utils =======================
+    /* ======================= Utils ======================= */
     private static BigDecimal nz(BigDecimal d){ return d == null ? BigDecimal.ZERO : d; }
     private static BigDecimal bz(Object o){
         if (o == null) return BigDecimal.ZERO;
@@ -67,51 +67,49 @@ public class PayrollDAO {
         if (o instanceof Number)     return BigDecimal.valueOf(((Number) o).doubleValue());
         try { return new BigDecimal(String.valueOf(o)); } catch (Exception e){ return BigDecimal.ZERO; }
     }
-
-    /** Lấy timestamp an toàn: ưu tiên updated_at, fallback created_at nếu tồn tại. */
     private static Timestamp safeTs(ResultSet rs) {
-        try {
-            // nếu có cột updated_at
-            rs.findColumn("updated_at");
-            return rs.getTimestamp("updated_at");
-        } catch (SQLException ignore) {
-            try {
-                // nếu có cột created_at
-                rs.findColumn("created_at");
-                return rs.getTimestamp("created_at");
-            } catch (SQLException ignore2) {
-                return null;
-            }
+        try { rs.findColumn("updated_at"); return rs.getTimestamp("updated_at"); }
+        catch (SQLException ignore) {
+            try { rs.findColumn("created_at"); return rs.getTimestamp("created_at"); }
+            catch (SQLException ignore2) { return null; }
         }
+    }
+    private static Long getLongOrNull(ResultSet rs, String col) {
+        try { long v = rs.getLong(col); return rs.wasNull() ? null : v; }
+        catch (SQLException e) { return null; }
+    }
+    private static BigDecimal getBigDecimalSafe(ResultSet rs, String col) {
+        try { rs.findColumn(col); return rs.getBigDecimal(col); }
+        catch (SQLException e) { return null; }
+    }
+    private static String getStringSafe(ResultSet rs, String col) {
+        try { rs.findColumn(col); return rs.getString(col); }
+        catch (SQLException e) { return null; }
     }
 
     private PayrollItem mapItem(ResultSet rs) throws SQLException {
         PayrollItem p = new PayrollItem();
-        p.id         = rs.getLong("id");
-        p.runId      = rs.getLong("run_id");
-        p.userId     = rs.getLong("user_id");
-        p.baseSalary = nz(rs.getBigDecimal("base_salary"));
-        p.allowance  = nz(rs.getBigDecimal("allowance"));
-        // hai tên cột OT phổ biến: ot_pay hoặc ot_amount
-        BigDecimal ot = null;
-        try { rs.findColumn("ot_pay");    ot = rs.getBigDecimal("ot_pay"); } catch (SQLException ignore) {}
-        if (ot == null) { try { rs.findColumn("ot_amount"); ot = rs.getBigDecimal("ot_amount"); } catch (SQLException ignore) {} }
+        p.id         = getLongOrNull(rs, "id");
+        p.runId      = getLongOrNull(rs, "run_id");
+        p.userId     = getLongOrNull(rs, "user_id");
+        p.baseSalary = nz(getBigDecimalSafe(rs, "base_salary"));
+        p.allowance  = nz(getBigDecimalSafe(rs, "allowance"));
+        BigDecimal ot = getBigDecimalSafe(rs, "ot_pay");
+        if (ot == null) ot = getBigDecimalSafe(rs, "ot_amount");
         p.otPay      = nz(ot);
-        p.bonus      = nz(rs.getBigDecimal("bonus"));
-        p.penalty    = nz(rs.getBigDecimal("penalty"));
-        p.insurance  = nz(rs.getBigDecimal("insurance"));
-        p.tax        = nz(rs.getBigDecimal("tax"));
-        p.netPay     = nz(rs.getBigDecimal("net_pay"));
-        p.note       = null;
-        try { rs.findColumn("note"); p.note = rs.getString("note"); } catch (SQLException ignore) {}
+        p.bonus      = nz(getBigDecimalSafe(rs, "bonus"));
+        p.penalty    = nz(getBigDecimalSafe(rs, "penalty"));
+        p.insurance  = nz(getBigDecimalSafe(rs, "insurance"));
+        p.tax        = nz(getBigDecimalSafe(rs, "tax"));
+        p.netPay     = nz(getBigDecimalSafe(rs, "net_pay"));
+        p.note       = getStringSafe(rs, "note");
         Timestamp ts = safeTs(rs);
         p.updatedAt  = (ts == null ? null : ts.toLocalDateTime());
         return p;
     }
 
-    // ======================= RUNS =======================
+    /* ======================= RUNS ======================= */
 
-    /** Tạo kỳ lương nếu chưa có; trả về id kỳ */
     public long createRun(int year, int month) {
         Optional<Long> existed = findRun(year, month);
         if (existed.isPresent()) return existed.get();
@@ -134,7 +132,6 @@ public class PayrollDAO {
         }
     }
 
-    /** Khóa kỳ lương */
     public boolean lockRun(long runId) {
         final String SQL = "UPDATE dbo.payroll_runs SET locked=1 WHERE id=? AND (locked=0 OR locked IS NULL)";
         try (Connection c = ds.getConnection();
@@ -146,7 +143,6 @@ public class PayrollDAO {
         }
     }
 
-    /** Tìm id kỳ lương theo (year, month) */
     public Optional<Long> findRun(int year, int month) {
         final String SQL = "SELECT id FROM dbo.payroll_runs WHERE period_year=? AND period_month=?";
         try (Connection c = ds.getConnection();
@@ -162,72 +158,78 @@ public class PayrollDAO {
         }
     }
 
-    // ======================= ITEMS =======================
+    /* ======================= ITEMS ======================= */
 
-    /** Danh sách item dạng Map (dùng cho JSP linh hoạt) */
-    public List<Map<String,Object>> listItems(long runId) {
-        final String SQL =
-            "SELECT i.*, u.full_name " +
-            "FROM dbo.payroll_items i " +
-            "LEFT JOIN dbo.Users u ON u.id = i.user_id " +
-            "WHERE i.run_id=? ORDER BY u.full_name, i.user_id";
-        try (Connection c = ds.getConnection();
-             PreparedStatement ps = c.prepareStatement(SQL)) {
-            ps.setLong(1, runId);
-            try (ResultSet rs = ps.executeQuery()) {
-                List<Map<String,Object>> out = new ArrayList<>();
-                while (rs.next()) {
-                    PayrollItem p = mapItem(rs);
-                    Map<String,Object> m = new LinkedHashMap<>();
-                    m.put("id", p.id);
-                    m.put("run_id", p.runId);
-                    m.put("user_id", p.userId);
-                    m.put("full_name", rs.getString("full_name"));
-                    m.put("base_salary", p.baseSalary);
-                    m.put("allowance",   p.allowance);
-                    m.put("ot_pay",      p.otPay);
-                    m.put("bonus",       p.bonus);
-                    m.put("penalty",     p.penalty);
-                    m.put("insurance",   p.insurance);
-                    m.put("tax",         p.tax);
-                    m.put("net_pay",     p.netPay);
-                    m.put("note",        p.note);
-                    m.put("updated_at",  p.updatedAt);
-                    out.add(m);
-                }
-                return out;
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("PayrollDAO.listItems error", e);
-        }
-    }
-
-    /** Danh sách item dạng đối tượng (Servlet dùng List<PayrollItem>) */
-public List<PayrollItem> listItemsAsObjects(long runId) {
-    // CHỈ dùng cột thật sự tồn tại trong bảng của bạn
+    /** Luôn hiển thị nhân viên ACTIVE (kể cả khi chưa có dòng trong payroll_items) */
+  // PayrollDAO.java
+/** Luôn hiển thị nhân viên ACTIVE (kể cả khi chưa có dòng trong payroll_items) */
+public List<Map<String,Object>> listView(long runId) {
     final String SQL =
-        "SELECT id, run_id, user_id, base_salary, allowance, ot_pay, " +
-        "       bonus, penalty, insurance, tax, net_pay, note " +   // KHÔNG nhắc tới updated_at
-        "FROM dbo.payroll_items WHERE run_id=? ORDER BY user_id";
+        "SELECT u.id AS user_id, " +
+        "       COALESCE(u.full_name, u.fullname, CONCAT('User #', u.id)) AS full_name, " +
+        "       COALESCE(i.base_salary,0) AS base_salary, " +
+        "       COALESCE(i.allowance,0)  AS allowance,  " +
+        "       COALESCE(i.ot_pay,0)      AS ot_pay,     " +
+        "       COALESCE(i.bonus,0)       AS bonus,      " +
+        "       COALESCE(i.penalty,0)     AS penalty,    " +
+        "       COALESCE(i.insurance,0)   AS insurance,  " +
+        "       COALESCE(i.tax,0)         AS tax,        " +
+        "       COALESCE(i.net_pay,0)     AS net_pay,    " +
+        "       i.note, i.run_id, i.id " +  // KHÔNG chọn i.updated_at để tránh lỗi cột không tồn tại
+        "FROM dbo.Users u " +
+        "LEFT JOIN dbo.payroll_items i ON i.user_id = u.id AND i.run_id = ? " +
+        "WHERE u.status = 1 " +
+        "ORDER BY COALESCE(u.full_name, u.fullname), u.id";
 
     try (Connection c = ds.getConnection();
          PreparedStatement ps = c.prepareStatement(SQL)) {
         ps.setLong(1, runId);
         try (ResultSet rs = ps.executeQuery()) {
-            List<PayrollItem> out = new ArrayList<>();
-            while (rs.next()) out.add(mapItem(rs));  // mapItem đã tự dò updated_at/created_at nếu có
+            List<Map<String,Object>> out = new ArrayList<>();
+            while (rs.next()) {
+                Map<String,Object> m = new LinkedHashMap<>();
+                m.put("id",         rs.getObject("id"));         // id trong payroll_items (có thể null)
+                m.put("run_id",     rs.getObject("run_id"));     // run_id trong payroll_items (có thể null)
+                m.put("user_id",    rs.getLong("user_id"));
+                m.put("full_name",  rs.getString("full_name"));
+                m.put("base_salary",rs.getBigDecimal("base_salary"));
+                m.put("allowance",  rs.getBigDecimal("allowance"));
+                m.put("ot_pay",     rs.getBigDecimal("ot_pay"));
+                m.put("bonus",      rs.getBigDecimal("bonus"));
+                m.put("penalty",    rs.getBigDecimal("penalty"));
+                m.put("insurance",  rs.getBigDecimal("insurance"));
+                m.put("tax",        rs.getBigDecimal("tax"));
+                m.put("net_pay",    rs.getBigDecimal("net_pay"));
+                m.put("note",       rs.getString("note"));
+                out.add(m);
+            }
             return out;
         }
     } catch (SQLException e) {
-        throw new RuntimeException("PayrollDAO.listItemsAsObjects error", e);
+        throw new RuntimeException("PayrollDAO.listView error", e);
     }
 }
 
-    /**
-     * Upsert 1 item theo (run_id, user_id).
-     * gross = base + allowance + ot + bonus - penalty
-     * net   = gross - insurance - tax  -> ghi vào cột net_pay
-     */
+    /** Danh sách item dạng đối tượng (nếu bạn cần) */
+    public List<PayrollItem> listItemsAsObjects(long runId) {
+        final String SQL =
+            "SELECT id, run_id, user_id, base_salary, allowance, ot_pay, " +
+            "       bonus, penalty, insurance, tax, net_pay, note " +
+            "FROM dbo.payroll_items WHERE run_id=? ORDER BY user_id";
+        try (Connection c = ds.getConnection();
+             PreparedStatement ps = c.prepareStatement(SQL)) {
+            ps.setLong(1, runId);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<PayrollItem> out = new ArrayList<>();
+                while (rs.next()) out.add(mapItem(rs));
+                return out;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("PayrollDAO.listItemsAsObjects error", e);
+        }
+    }
+
+    /** Insert/Update một dòng lương theo (run_id, user_id) */
     public void upsertItem(PayrollItem p) {
         if (p == null || p.runId == null || p.userId == null)
             throw new IllegalArgumentException("PayrollItem thiếu runId/userId");
@@ -241,8 +243,8 @@ public List<PayrollItem> listItemsAsObjects(long runId) {
         BigDecimal net = gross
                 .subtract(nz(p.insurance))
                 .subtract(nz(p.tax));
-
         p.netPay = net;
+
         LocalDateTime now = LocalDateTime.now();
 
         final String SQL_UPDATE =
@@ -300,19 +302,19 @@ public List<PayrollItem> listItemsAsObjects(long runId) {
         }
     }
 
-    // tiện ích nhanh để build Map -> PayrollItem
+    /* Build từ Map (nếu cần) */
     public static PayrollItem fromMap(long runId, long userId, Map<String,Object> m){
         PayrollItem p = new PayrollItem();
-        p.runId     = runId;
-        p.userId    = userId;
-        p.baseSalary= bz(m.get("base_salary"));
-        p.allowance = bz(m.get("allowance"));
-        p.otPay     = bz(m.get("ot_pay"));
-        p.bonus     = bz(m.get("bonus"));
-        p.penalty   = bz(m.get("penalty"));
-        p.insurance = bz(m.get("insurance"));
-        p.tax       = bz(m.get("tax"));
-        p.note      = (String) m.getOrDefault("note", null);
+        p.runId      = runId;
+        p.userId     = userId;
+        p.baseSalary = bz(m.get("base_salary"));
+        p.allowance  = bz(m.get("allowance"));
+        p.otPay      = bz(m.get("ot_pay"));
+        p.bonus      = bz(m.get("bonus"));
+        p.penalty    = bz(m.get("penalty"));
+        p.insurance  = bz(m.get("insurance"));
+        p.tax        = bz(m.get("tax"));
+        p.note       = (String) m.getOrDefault("note", null);
         return p;
     }
 }

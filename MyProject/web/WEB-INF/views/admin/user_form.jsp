@@ -2,7 +2,6 @@
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
 
 <jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
-<jsp:include page="/WEB-INF/views/audit/_audit_header.jsp" />
 
 <c:set var="ctx" value="${pageContext.request.contextPath}" />
 
@@ -480,6 +479,17 @@
   }
 })();
 </script>
+<script>
+  // nút Mini/Expand trong sidebar hoặc header hãy cho data-action tương ứng
+  document.addEventListener('click', (e)=>{
+    if (e.target.closest('[data-action="sidebar-mini"]')) {
+      document.body.classList.toggle('sb-mini');
+    }
+    if (e.target.closest('[data-action="sidebar-open"]')) {
+      document.body.classList.toggle('sb-open'); // dùng cho mobile
+    }
+  });
+</script>
 
 <style>
 :root{
@@ -490,6 +500,52 @@
 body.dark .user-form-page{
   --bg:#0f172a; --card:rgba(15,23,42,.45); --card-2:rgba(15,23,42,.6);
   --bd:rgba(255,255,255,.08); --tx:#e2e8f0; --muted:rgba(226,232,240,.6);
+}
+
+/* === Layout constants === */
+:root{
+  --sbw: 240px;        /* sidebar width (normal) */
+  --sbw-mini: 72px;    /* sidebar width (mini)   */
+  --header-h: 60px;    /* header bar height      */
+}
+
+/* Sidebar của Audit (file _audit_sidebar.jsp) */
+.audit-sidebar, .audit__sidebar{
+  position: fixed;
+  inset: 0 auto 0 0;   /* top:0; bottom:0; left:0 */
+  width: var(--sbw);
+  z-index: 900;        /* dưới header một chút */
+}
+
+/* Header của Audit (file _audit_header.jsp) nếu đang fixed/sticky */
+.audit-header, .audit__header{
+  position: sticky;
+  top: 0;
+  z-index: 950;        /* cao hơn sidebar để nổi phía trên */
+}
+
+/* Nội dung chính phải chừa khoảng cho sidebar */
+.main-body{
+  margin-left: var(--sbw);
+  padding-top: calc(var(--header-h) + 10px);
+  min-height: 100vh;
+}
+
+/* Trạng thái thu gọn (mini) – chỉ cần gán class sb-mini lên body khi bấm nút Mini */
+body.sb-mini .audit-sidebar, 
+body.sb-mini .audit__sidebar{ width: var(--sbw-mini); }
+body.sb-mini .main-body{ margin-left: var(--sbw-mini); }
+
+/* Mobile: đẩy sidebar thành off-canvas, nội dung full width */
+@media (max-width: 992px){
+  .audit-sidebar, .audit__sidebar{
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    width: var(--sbw);
+  }
+  body.sb-open .audit-sidebar, 
+  body.sb-open .audit__sidebar{ transform: none; }
+  .main-body{ margin-left: 0; }
 }
 
 .user-form-page{ background:radial-gradient(circle at top,#e0e7ff,#eef2f7 40%,#fff 70%); padding:2.6rem 0 3.5rem; min-height:calc(100vh - 70px); }

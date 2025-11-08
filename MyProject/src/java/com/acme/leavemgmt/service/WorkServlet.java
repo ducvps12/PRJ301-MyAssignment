@@ -34,9 +34,7 @@ public class WorkServlet extends HttpServlet {
         DataSource ds = injectedDs;
         if (ds == null) {
             Object ctxObj = getServletContext().getAttribute("DS");
-            if (ctxObj instanceof DataSource) {
-                ds = (DataSource) ctxObj;
-            }
+            if (ctxObj instanceof DataSource) ds = (DataSource) ctxObj;
         }
         if (ds == null) {
             try {
@@ -44,7 +42,7 @@ public class WorkServlet extends HttpServlet {
                 getServletContext().setAttribute("DS", ds);
             } catch (Exception e) {
                 throw new IllegalStateException(
-                        "DataSource jdbc/LeaveDB not found. Check context.xml + driver in tomcat/lib.", e);
+                    "DataSource jdbc/LeaveDB not found. Check context.xml + driver in tomcat/lib.", e);
             }
         }
         dao = new WorkDAO(ds);
@@ -57,37 +55,45 @@ public class WorkServlet extends HttpServlet {
         req.setCharacterEncoding(StandardCharsets.UTF_8.name());
         resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        String path = nz(req.getPathInfo());
+        // Chuẩn hoá path: null -> "", bỏ các dấu '/' dư ở cuối
+        String rawPath = req.getPathInfo();                 // null | "/todos" | "/todos/"
+        String path = (rawPath == null) ? "" : rawPath.replaceAll("/+$", "");
         int page = intParam(req, "page", 1);
 
-        // /work/todos
-        if ("/todos".equals(path)) {
-            String status = nz(req.getParameter("status"));
-            Long assignee = toLong(req.getParameter("assignee"));
-            List<?> rows = dao.listTodos(status, assignee, page, 20);
+        switch (path) {
+            // ------------------- /work/todos -------------------
+            case "/todos": {
+                String status = nz(req.getParameter("status"));
+                Long assignee = toLong(req.getParameter("assignee"));
+                List<?> rows = dao.listTodos(status, assignee, page, 20);
 
-            req.setAttribute("todos", rows);
-            req.setAttribute("status", status);
-            req.setAttribute("assignee", assignee);
-            req.setAttribute("page", page);
-            req.getRequestDispatcher("/WEB-INF/views/work/todos.jsp").forward(req, resp);
-            return;
+                req.setAttribute("todos", rows);
+                req.setAttribute("status", status);
+                req.setAttribute("assignee", assignee);
+                req.setAttribute("page", page);
+                req.getRequestDispatcher("/WEB-INF/views/work/todos.jsp").forward(req, resp);
+                return;
+            }
+
+            // ------------------- /work (reports) -------------------
+            case "":
+            default: {
+                String type = nz(req.getParameter("type")); // DAILY/WEEKLY/MONTHLY/...
+                LocalDate from = dateParam(req, "from", LocalDate.now().minusDays(14));
+                LocalDate to   = dateParam(req, "to",   LocalDate.now());
+
+                Long userId = currentUserId(req);
+                List<?> reports = dao.listReports(userId, from, to, type);
+
+                req.setAttribute("reports", reports);
+                req.setAttribute("type", type);
+                req.setAttribute("from", from);
+                req.setAttribute("to", to);
+                req.setAttribute("page", page);
+                req.getRequestDispatcher("/WEB-INF/views/work/reports.jsp").forward(req, resp);
+                return;
+            }
         }
-
-        // /work (reports)
-        String type = nz(req.getParameter("type")); // DAILY/WEEKLY/...
-        LocalDate from = dateParam(req, "from", LocalDate.now().minusDays(14));
-        LocalDate to   = dateParam(req, "to",   LocalDate.now());
-
-        Long userId = currentUserId(req);
-        List<?> reports = dao.listReports(userId, from, to, type);
-
-        req.setAttribute("reports", reports);
-        req.setAttribute("type", type);
-        req.setAttribute("from", from);
-        req.setAttribute("to", to);
-        req.setAttribute("page", page);
-        req.getRequestDispatcher("/WEB-INF/views/work/reports.jsp").forward(req, resp);
     }
 
     @Override
@@ -151,7 +157,7 @@ public class WorkServlet extends HttpServlet {
             return;
         }
 
-        // default
+        // fallback
         resp.sendRedirect(backOr(req, req.getContextPath() + "/work"));
     }
 
@@ -183,30 +189,26 @@ public class WorkServlet extends HttpServlet {
         try { return LocalDate.parse(v); } catch (Exception e){ return def; }
     }
 
-    /** Lấy id linh hoạt từ session currentUser (User/Map/Number/String) */
+    /** Lấy id linh hoạt từ session currentUser (User/Map/Number/String). */
     private static Long currentUserId(HttpServletRequest req){
         Object me = req.getSession().getAttribute("currentUser");
         if (me == null) return null;
 
-        // Thử getId() nếu có
-        try {
+        try { // getId() nếu có
             Object val = me.getClass().getMethod("getId").invoke(me);
             return toLong(val);
-        } catch (Exception ignore) {
-            // bỏ qua
-        }
-        // Nếu là Map -> lấy "id"
+        } catch (Exception ignore) {}
+
         if (me instanceof Map) {
             Object idVal = ((Map<?, ?>) me).get("id");
             return toLong(idVal);
         }
-        // Còn lại: cố gắng parse trực tiếp
         return toLong(me);
     }
 
     private static Long toLong(Object v){
         if (v == null) return null;
-        if (v instanceof Long)   return (Long) v;
+        if (v instanceof Long)    return (Long) v;
         if (v instanceof Integer) return ((Integer) v).longValue();
         if (v instanceof Number)  return ((Number) v).longValue();
         String s = String.valueOf(v).trim();

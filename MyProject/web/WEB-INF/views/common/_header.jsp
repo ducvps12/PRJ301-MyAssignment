@@ -1,12 +1,9 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ include file="/WEB-INF/views/common/_taglibs.jsp" %>
+
 <c:set var="cp" value="${pageContext.request.contextPath}" />
 <c:set var="portalUrl" value="${empty sessionScope.portalUrl ? cp.concat('/portal') : sessionScope.portalUrl}" />
-
-<%
-  String _uri = request.getRequestURI();
-  request.setAttribute("_uri", _uri);
-%>
+<c:set var="_uri" value="${pageContext.request.requestURI}" />
 
 <!-- Skip link -->
 <a class="skip-link" href="#main" tabindex="0">Bỏ qua tới nội dung</a>
@@ -28,8 +25,9 @@
 
     <!-- Main Nav -->
     <nav id="mainnav" class="nav" role="navigation" aria-label="Chính">
-      <c:set var="u"          value="${sessionScope.currentUser}" />
-      <c:set var="role"       value="${empty u ? '' : (empty u.role ? (empty u.roleCode ? '' : u.roleCode) : u.role)}"/>
+      <!-- Dùng 'me' để không đè biến 'u' ở trang con -->
+      <c:set var="me"         value="${sessionScope.currentUser}" />
+      <c:set var="role"       value="${empty me ? '' : (empty me.role ? (empty me.roleCode ? '' : me.roleCode) : me.role)}"/>
       <c:set var="R"          value="${fn:toUpperCase(fn:trim(role))}"/>
       <c:set var="isAdmin"    value="${R=='ADMIN' or R=='SYS_ADMIN'}" />
       <c:set var="isDivLead"  value="${R=='DIV_LEADER'}" />
@@ -91,7 +89,7 @@
           <div class="menu-title">Thông báo</div>
           <a href="${cp}/request/list">Bạn có 2 đơn chờ duyệt</a>
           <a href="${cp}/request/agenda">Hôm nay có 3 người nghỉ</a>
-          <a href="${cp}/admin/users">1 người dùng mới được thêm</a>
+          <a href="${cp}/admin/users}">1 người dùng mới được thêm</a>
           <div class="divider"></div>
           <button type="button" class="markread">Đánh dấu đã đọc</button>
         </div>
@@ -102,11 +100,11 @@
         <button id="btnUser" class="userbtn" aria-haspopup="true" aria-expanded="false" aria-controls="usermenu" data-no-overlay="true">
           <span class="avatar" aria-hidden="true">
             <c:choose>
-              <c:when test="${not empty u && not empty u.fullName}">${fn:substring(u.fullName,0,1)}</c:when>
+              <c:when test="${not empty me && not empty me.fullName}">${fn:substring(me.fullName,0,1)}</c:when>
               <c:otherwise>U</c:otherwise>
             </c:choose>
           </span>
-          <span class="name"><c:out value="${u != null ? (empty u.displayName ? u.fullName : u.displayName) : 'Guest'}"/></span>
+          <span class="name"><c:out value="${me != null ? (empty me.displayName ? me.fullName : me.displayName) : 'Guest'}"/></span>
           <svg class="chev" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5 7l5 6 5-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
         <div id="usermenu" class="menu" hidden>
