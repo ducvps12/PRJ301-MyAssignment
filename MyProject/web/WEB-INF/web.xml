@@ -364,11 +364,14 @@
     <servlet-name>LogoutServlet</servlet-name>
     <url-pattern>/logout</url-pattern>
   </servlet-mapping>
-
   <!-- ===================== FILTERS ===================== -->
   <filter>
     <filter-name>AuthFilter</filter-name>
     <filter-class>com.acme.leavemgmt.filter.AuthFilter</filter-class>
+    <init-param>
+      <param-name>excludePaths</param-name>
+      <param-value>/login,/logout,/forgot,/assets/</param-value>
+    </init-param>
   </filter>
   <filter-mapping>
     <filter-name>AuthFilter</filter-name>
@@ -383,34 +386,29 @@
     <filter-name>RoleFilter</filter-name>
     <url-pattern>/admin/*</url-pattern>
   </filter-mapping>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/request/approve</url-pattern>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/request/approve/*</url-pattern>
-  </filter-mapping>
-  <!-- (Nếu UI dùng /approvals thì bật 2 mapping dưới; nếu không dùng, có thể xóa) -->
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/approvals</url-pattern>
-  </filter-mapping>
-  <filter-mapping>
-    <filter-name>RoleFilter</filter-name>
-    <url-pattern>/approvals/*</url-pattern>
-  </filter-mapping>
 
-  <!-- ===================== SETTINGS & ERROR PAGES ===================== -->
+  <!-- (Nếu UI dùng /approvals thì giữ; không dùng thì xóa) -->
   <servlet>
-    <servlet-name>AdminSettingsServlet</servlet-name>
-    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSettingsServlet</servlet-class>
+    <servlet-name>ApprovalsServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.ApprovalsServlet</servlet-class>
     <load-on-startup>1</load-on-startup>
   </servlet>
   <servlet-mapping>
-    <servlet-name>AdminSettingsServlet</servlet-name>
-    <url-pattern>/admin/settings</url-pattern>
+    <servlet-name>ApprovalsServlet</servlet-name>
+    <url-pattern>/request/approvals</url-pattern>
   </servlet-mapping>
+
+
+  <!-- ===================== SETTINGS & ERROR PAGES ===================== -->
+<servlet>
+  <servlet-name>AdminSettingsServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSettingsServlet</servlet-class>
+  <load-on-startup>1</load-on-startup>
+</servlet>
+<servlet-mapping>
+  <servlet-name>AdminSettingsServlet</servlet-name>
+  <url-pattern>/admin/settings</url-pattern>
+</servlet-mapping>
 
  <!-- ===== Reports module ===== -->
 <servlet>

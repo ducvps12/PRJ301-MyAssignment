@@ -1845,106 +1845,118 @@ public List<Request> dedupe(List<Request> raw) {
     return new ArrayList<>(map.values());
 }
 
-    // === API chính bạn cần ===
-    public List<Request> findPendingForApprover(User me) throws SQLException {
-        // Phân nhánh theo role
-        String role = (me.getRole() == null ? "" : me.getRole().toUpperCase());
+// === API chính bạn cần ===
+public List<Request> findPendingForApprover(User me) throws SQLException {
+    // Chuẩn hóa role
+    String role = (me.getRoleCode() != null ? me.getRoleCode() : me.getRole());
+    role = (role == null ? "" : role.trim().toUpperCase());
 
-        if ("ADMIN".equals(role)) {
-            // ADMIN thấy tất cả pending
-           String sql = ""
-    + "SELECT DISTINCT r.* , u.department AS requester_department "
-    + "FROM requests r "
-    + "JOIN users u ON u.id = r.requester_id "
-    + "WHERE r.status = 'PENDING' "
-    + "ORDER BY r.created_at DESC";
+    final String BASE =
+        "SELECT DISTINCT r.*, u.full_name AS full_name, u.department_id AS requester_dept " +
+        "FROM dbo.Requests r " +
+        "JOIN dbo.Users u ON u.user_id = r.user_id " +
+        "WHERE r.status = 'PENDING' ";
 
-            return query(sql /* no extra params */);
-        }
-
-        if ("MANAGER".equals(role)) {
-            // MANAGER: cùng phòng hoặc thuộc cây cấp dưới (đệ quy qua manager_id)
-            String sql = ""
-                + "WITH RECURSIVE sub AS ( "
-                + "  SELECT id FROM users WHERE manager_id = ? "
-                + "  UNION ALL "
-                + "  SELECT u.id FROM users u JOIN sub s ON u.manager_id = s.id "
-                + ") "
-                + "SELECT r.* , u.department AS requester_department "
-                + "FROM requests r "
-                + "JOIN users u ON u.id = r.requester_id "
-                + "WHERE r.status = 'PENDING' "
-                + "  AND (u.department = ? OR u.id IN (SELECT id FROM sub)) "
-                + "ORDER BY r.created_at DESC";
-            return query(sql, me.getId(), me.getDepartment());
-        }
-
-        // APPROVER/USER: chỉ thấy những request được assign cho mình
-        String sql = ""
-            + "SELECT r.* , u.department AS requester_department "
-            + "FROM requests r "
-            + "JOIN users u ON u.id = r.requester_id "
-            + "WHERE r.status = 'PENDING' "
-            + "  AND r.approver_id = ? "
-            + "ORDER BY r.created_at DESC";
-        return query(sql, me.getId());
+    // 1️⃣ ADMIN thấy tất cả PENDING
+    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role)) {
+        String sql = BASE + "ORDER BY r.created_at DESC";
+        return query(sql);
     }
 
-    // === Helper query chung (varargs) ===
-    private List<Request> query(String sql, Object... params) throws SQLException {
+    // 2️⃣ LEADER / MANAGER / HR
+    if ("DIV_LEADER".equals(role) || "TEAM_LEAD".equals(role)
+        || "MANAGER".equals(role) || "LEADER".equals(role)
+        || "HR_ADMIN".equals(role)) {
+
+        String sql =
+            "WITH sub AS ( " +
+            "    SELECT u.user_id FROM dbo.Users u WHERE u.manager_id = ? " +
+            "    UNION ALL " +
+            "    SELECT u2.user_id FROM dbo.Users u2 JOIN sub s ON u2.manager_id = s.user_id " +
+            ") " +
+            BASE +
+            "AND ( " +
+            "      u.department_id = ? " +          // cùng phòng
+            "   OR r.processed_by = ? " +           // được assign xử lý
+            "   OR r.approved_by  = ? " +           // được assign duyệt
+            "   OR u.user_id IN (SELECT user_id FROM sub) " + // cấp dưới
+            ") " +
+            "ORDER BY r.created_at DESC OPTION (MAXRECURSION 100)";
+
+        return query(sql,
+            me.getUserId(),           // manager_id cho CTE sub
+            me.getDepartmentId(),     // phòng ban leader
+            me.getUserId(),           // processed_by
+            me.getUserId()            // approved_by
+        );
+    }
+
+    // 3️⃣ User thường: chỉ xem đơn được gán cho mình duyệt/xử lý
+    String sql =
+        BASE +
+        "AND (r.processed_by = ? OR r.approved_by = ?) " +
+        "ORDER BY r.created_at DESC";
+
+    return query(sql, me.getUserId(), me.getUserId());
+}
+
+
+
+private List<Request> query(String sql, Object... params) throws SQLException {
     try (Connection cn = DBConnection.getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
+         PreparedStatement ps = cn.prepareStatement(sql)) {
 
-            // bind params
-            for (int i = 0; i < params.length; i++) {
-                Object p = params[i];
-                if (p instanceof Integer)       ps.setInt(i + 1, (Integer) p);
-                else if (p instanceof Long)     ps.setLong(i + 1, (Long) p);
-                else if (p instanceof String)   ps.setString(i + 1, (String) p);
-                else if (p instanceof java.util.Date)
-                    ps.setTimestamp(i + 1, new Timestamp(((java.util.Date) p).getTime()));
-                else if (p instanceof LocalDate)
-                    ps.setDate(i + 1, Date.valueOf((LocalDate) p));
-                else if (p instanceof LocalDateTime)
-                    ps.setTimestamp(i + 1, Timestamp.valueOf((LocalDateTime) p));
-                else if (p == null)            ps.setObject(i + 1, null);
-                else                            ps.setObject(i + 1, p);
-            }
+        for (int i = 0; i < params.length; i++) {
+            Object p = params[i];
+            int idx = i + 1;
 
-            List<Request> list = new ArrayList<>();
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) list.add(mapRequest(rs));
-            }
-            return list;
+            if (p == null) {
+                // đoán kiểu hay dùng: ID là INT/BIGINT, mặc định INT
+                ps.setNull(idx, java.sql.Types.INTEGER);
+            } else if (p instanceof Integer)   ps.setInt(idx, (Integer) p);
+            else if (p instanceof Long)        ps.setLong(idx, (Long) p);
+            else if (p instanceof String)      ps.setString(idx, (String) p);
+            else if (p instanceof java.time.LocalDate)     ps.setDate(idx, java.sql.Date.valueOf((java.time.LocalDate)p));
+            else if (p instanceof java.time.LocalDateTime) ps.setTimestamp(idx, java.sql.Timestamp.valueOf((java.time.LocalDateTime)p));
+            else if (p instanceof java.util.Date)          ps.setTimestamp(idx, new java.sql.Timestamp(((java.util.Date)p).getTime()));
+            else ps.setObject(idx, p);
         }
+
+        List<Request> list = new java.util.ArrayList<>();
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) list.add(mapRequest(rs));
+        }
+        return list;
     }
+}
+private Request mapRequest(ResultSet rs) throws SQLException {
+    Request r = new Request();
+    r.setId(rs.getInt("id"));
+    r.setUserId(rs.getInt("user_id"));
+    r.setType(rs.getString("type"));
+    r.setReason(rs.getString("reason"));
+    r.setStatus(rs.getString("status"));
 
-    // === Mapper: chỉnh theo schema của bạn nếu khác ===
-    private Request mapRequest(ResultSet rs) throws SQLException {
-        Request r = new Request();
-        r.setId((int) rs.getLong("id"));
-        r.setRequesterId(rs.getLong("requester_id"));
-        r.setApproverId(safeGetLong(rs, "approver_id"));
-        r.setType(safeGet(rs, "type"));
-        r.setReason(safeGet(rs, "reason"));
-        r.setStatus(safeGet(rs, "status"));
+    // nếu cột là start_date / end_date:
+    java.sql.Date sd = rs.getDate("start_date");
+    java.sql.Date ed = rs.getDate("end_date");
+    r.setFrom(sd == null ? null : sd.toLocalDate());
+    r.setTo(ed == null ? null : ed.toLocalDate());
 
-        // Ngày từ/đến có thể là DATE hoặc TIMESTAMP
-        r.setFrom(rs.getObject("from_date") != null
-                ? rs.getDate("from_date").toLocalDate() : null);
-        r.setTo(rs.getObject("to_date") != null
-                ? rs.getDate("to_date").toLocalDate() : null);
+    java.sql.Timestamp ct = rs.getTimestamp("created_at");
+    r.setCreatedAt(ct == null ? null : ct.toLocalDateTime());
 
-        r.setCreatedAt(rs.getObject("created_at") != null
-                ? rs.getTimestamp("created_at").toLocalDateTime() : null);
-        r.setApprovedAt(rs.getObject("approved_at") != null
-                ? rs.getTimestamp("approved_at").toLocalDateTime() : null);
+    java.sql.Timestamp ap = rs.getTimestamp("approved_at");
+    r.setApprovedAt(ap == null ? null : ap.toLocalDateTime());
 
-        // optional: department của requester (do JOIN users u)
-        r.setRequesterDepartment(safeGet(rs, "requester_department"));
+    r.setProcessedBy((Integer) (rs.getObject("processed_by") == null ? null : rs.getInt("processed_by")));
+    r.setApprovedBy((Integer) (rs.getObject("approved_by")  == null ? null : rs.getInt("approved_by")));
 
-        return r;
-    }
+    // để JSP hiển thị tên:
+    r.setFullName(rs.getString("full_name")); // từ SELECT u.full_name AS full_name
+
+    return r;
+}
 
     private static String safeGet(ResultSet rs, String col) {
         try { String v = rs.getString(col); return rs.wasNull() ? null : v; }

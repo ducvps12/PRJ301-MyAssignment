@@ -7,544 +7,247 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
-import static org.apache.tomcat.jakartaee.commons.compress.utils.TimeUtils.toDate;
-import static org.apache.tomcat.jakartaee.commons.io.file.attribute.FileTimes.toDate;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 
 /**
- * Leave Request domain model. - Dùng LocalDate cho ngày; cung cấp alias
- * java.util.Date cho JSP fmt:formatDate. - Trạng thái nên lưu lowercase trong
- * DB: pending/approved/rejected/cancelled. - Có alias để tương thích JSP cũ:
- * getFrom(), getTo(), getFullName(), getType().
+ * Leave Request domain model
+ * - Dùng LocalDate/LocalDateTime cho ngày & thời gian.
+ * - Alias tương thích JSP cũ: getFrom(), getTo(), getFullName(), getType().
+ * - Có helper tính số ngày, kiểm tra giao khoảng, trạng thái...
  */
 public class Request implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
-    /**
-     * Trạng thái gợi ý dùng
-     */
-    public static final String ST_PENDING = "pending";
-    public static final String ST_APPROVED = "approved";
-    public static final String ST_REJECTED = "rejected";
-    public static final String ST_CANCELLED = "cancelled";
-// Request.java
-    private String leaveTypeName; // tên hiển thị
-    private LocalDateTime approvedAt;
-    private LocalDateTime createdAt;
+    // ===== Trạng thái chuẩn =====
+    public static final String ST_PENDING   = "PENDING";
+    public static final String ST_APPROVED  = "APPROVED";
+    public static final String ST_REJECTED  = "REJECTED";
+    public static final String ST_CANCELLED = "CANCELLED";
 
-    public String getLeaveTypeName() {
-        if (leaveTypeName != null && !leaveTypeName.isBlank()) {
-            return leaveTypeName;
-        }
-        // fallback từ type/code nếu bạn đã có
-        String t = getType(); // ví dụ field "type" hiện có
-        if (t == null) {
-            return null;
-        }
-        return switch (t) {
-            case "AL", "ANNUAL" ->
-                "Annual Leave (Phép năm)";
-            case "SL", "SICK" ->
-                "Sick Leave (Nghỉ ốm)";
-            case "UL", "UNPAID" ->
-                "Unpaid Leave (Không lương)";
-            default ->
-                t;
-        };
-    }
+    // ======= CORE (match dbo.Requests) =======
+    private Integer id;                 // id (PK)
+    private Integer userId;             // user_id (người tạo/requester)
+    private String  type;               // ANNUAL/SICK/UNPAID/WFH...
+    private String  reason;             // reason
+    private String  status;             // PENDING/APPROVED/REJECTED/CANCELLED
+    private LocalDate startDate;        // start_date
+    private LocalDate endDate;          // end_date
+    private LocalDateTime createdAt;    // created_at
+    private LocalDateTime approvedAt;   // approved_at (nullable)
+    private Integer processedBy;        // processed_by (nullable)
+    private Integer approvedBy;         // approved_by (nullable)
+    private Integer leaveTypeId;        // leave_type_id (nullable)
+    private String  managerNote;        // manager_note (nullable)
+    private String  approveNote;        // approve_note (nullable)
+    private String  title;              // title (nullable)
+    private String  attachmentName;     // nếu có file đính kèm (nullable)
 
-    public void setLeaveTypeName(String name) {
-        this.leaveTypeName = name;
-    }
+    // ======= JOIN/VIEW tiện cho UI =======
+    private String  fullName;           // Users.full_name của requester
+    private String  createdByName;      // alias nếu DAO map tên tạo
+    private String  processedByName;
+    private String  approvedByName;
+    private String  department;         // tên phòng ban
+    private Integer departmentId;       // id phòng ban
+    private Integer managerId;          // id quản lý trực tiếp
+    private String  requesterDepartment;// alias: requester_department
+    private String  leaveTypeName;      // tên loại phép nếu JOIN
 
-    private int id;
-
-    /**
-     * Optional title cho UI
-     */
-    private String title;
-
-    /**
-     * Loại nghỉ (Annual, Sick, WFH, …) – thêm để khớp JSP cũ
-     */
-    private String type;
-
-    private String reason;
-
-    /**
-     * Ngày dùng java.time
-     */
-    private LocalDate startDate;
-    private LocalDate endDate;
-
-    /**
-     * Trạng thái: pending/approved/rejected/cancelled (khuyến nghị lowercase
-     * trong DB)
-     */
-    private String status;
-
-    /**
-     * Người tạo
-     */
-    private int createdBy;
-    private String createdByName;   // JOIN từ Users
-
-    /**
-     * Người xử lý
-     */
-    private Integer processedBy;    // nullable
-    private String processedByName; // JOIN từ Users
-
-    /**
-     * Ghi chú của quản lý khi duyệt/từ chối
-     */
-    private String managerNote;
-
-    /**
-     * Phòng ban & người duyệt đầu tiên (để filter/logic phê duyệt)
-     */
-    private String department;
-    private int managerId;
-
-    /**
-     * Đính kèm (nếu có)
-     */
-    private String attachmentName;
-
+    // ======= Lịch sử =======
     private List<RequestHistory> history;
 
-    // ---------------- Constructors ----------------
-    public Request() {
-    }
+    // ========= Constructors =========
+    public Request() {}
 
-    public Request(int id, String reason, LocalDate startDate, LocalDate endDate,
-            String status, int createdBy, String createdByName) {
+    public Request(int id, String reason, LocalDate start, LocalDate end,
+                   String status, int userId, String createdByName) {
         this.id = id;
         this.reason = reason;
-        this.startDate = startDate;
-        this.endDate = endDate;
+        this.startDate = start;
+        this.endDate = end;
         this.status = status;
-        this.createdBy = createdBy;
+        this.userId = userId;
         this.createdByName = createdByName;
     }
 
+    // ========= Helpers =========
+    /** Số ngày nghỉ, tính cả hai đầu. */
     public long getDays() {
-        LocalDate s = getStartDate();  // dùng getter thay vì truy cập field
-        LocalDate e = getEndDate();
-        if (s == null || e == null) {
-            return 0;
-        }
-        return ChronoUnit.DAYS.between(s, e) + 1;
-    }
-
-    // Fields
-    private String attachmentUrl;   // hoặc attachmentPath nếu bạn thích lưu path nội bộ
-    private String attachmentPath;
-
-// --- Attachment (tạm thời, có thể chưa map DB) ---
-    public String getAttachmentUrl() {
-        return null;
-    }     // TODO: map thật sau
-
-    public String getAttachmentPath() {
-        return null;
-    }     // TODO: map thật sau
-
-    public String getAttachmentName() {
-        return null;
-    }     // TODO: map thật sau
-// Nếu JSP có dùng ${r.hasAttachment}, thêm luôn:
-
-    public boolean isHasAttachment() {
-        return false; // TODO: khi map thật thì trả theo Url/Path/Name
-    }
-
-    /**
-     * Copy constructor
-     */
-    public Request(Request other) {
-        if (other == null) {
-            return;
-        }
-        this.id = other.id;
-        this.title = other.title;
-        this.type = other.type;
-        this.reason = other.reason;
-        this.startDate = other.startDate;
-        this.endDate = other.endDate;
-        this.status = other.status;
-        this.createdBy = other.createdBy;
-        this.createdByName = other.createdByName;
-        this.processedBy = other.processedBy;
-        this.processedByName = other.processedByName;
-        this.managerNote = other.managerNote;
-        this.department = other.department;
-        this.managerId = other.managerId;
-        this.attachmentName = other.attachmentName;
-        this.history = other.history; // lưu ý: shallow copy
-    }
-
-    // -------- Helpers cho JSP (fmt:formatDate cần java.util.Date) --------
-    public Date getStartDateDate() {
-        return startDate == null ? null : java.sql.Date.valueOf(startDate);
-    }
-
-    public Date getEndDateDate() {
-        return endDate == null ? null : java.sql.Date.valueOf(endDate);
-    }
-
-    // Back-compat alias (nếu JSP cũ gọi tên này)
-    public Date getStartDateUtil() {
-        return getStartDateDate();
-    }
-
-    public Date getEndDateUtil() {
-        return getEndDateDate();
-    }
-
-    /**
-     * Alias để khớp JSP cũ dùng r.from / r.to
-     */
-    public Date getFrom() {
-        return getStartDateDate();
-    }
-
-    public Date getTo() {
-        return getEndDateDate();
-    }
-
-    /**
-     * Alias để khớp JSP cũ dùng r.fullName
-     */
-    public String getFullName() {
-        return createdByName;
-    }
-
-    /**
-     * Alias để khớp JSP cũ dùng r.type
-     */
-    public String getType() {
-        return type;
-    }
-
-    // ---------------- Business helpers ----------------
-    /**
-     * Tổng số ngày (bao gồm cả ngày bắt đầu & kết thúc); 0 nếu thiếu ngày
-     */
-    public long getTotalDays() {
-        if (startDate == null || endDate == null) {
-            return 0L;
-        }
+        if (startDate == null || endDate == null) return 0;
         return ChronoUnit.DAYS.between(startDate, endDate) + 1;
     }
 
-    public String getStatusUpper() {
-        return status == null ? null : status.toUpperCase();
-    }
+    /** Tổng số ngày (alias). */
+    public long getTotalDays() { return getDays(); }
 
-    public String getStatusLower() {
-        return status == null ? null : status.toLowerCase();
-    }
-
-    public boolean isPending() {
-        return ST_PENDING.equalsIgnoreCase(status);
-    }
-
-    public boolean isApproved() {
-        return ST_APPROVED.equalsIgnoreCase(status);
-    }
-
-    public boolean isRejected() {
-        return ST_REJECTED.equalsIgnoreCase(status);
-    }
-
-    public boolean isCancelled() {
-        return ST_CANCELLED.equalsIgnoreCase(status);
-    }
-
-    /**
-     * Có hiệu lực bao phủ ngày d cho yêu cầu đã APPROVED (bao gồm 2 đầu)
-     */
-    public boolean isActiveOn(LocalDate d) {
-        if (!isApproved() || d == null || startDate == null || endDate == null) {
-            return false;
-        }
-        return !d.isBefore(startDate) && !d.isAfter(endDate);
-    }
-
-    /**
-     * Khoảng ngày [a,b] có giao với request này không (không xét status)
-     */
+    /** Có giao với khoảng [a,b] không (không xét status). */
     public boolean overlaps(LocalDate a, LocalDate b) {
-        if (a == null || b == null || startDate == null || endDate == null) {
-            return false;
-        }
-        if (b.isBefore(a)) { // hoán đổi nếu truyền ngược
-            LocalDate tmp = a;
-            a = b;
-            b = tmp;
-        }
+        if (a == null || b == null || startDate == null || endDate == null) return false;
+        if (b.isBefore(a)) { LocalDate t = a; a = b; b = t; }
         return !(endDate.isBefore(a) || startDate.isAfter(b));
     }
 
-    public boolean hasAttachment() {
-        return attachmentName != null && !attachmentName.isBlank();
+    /** Đơn đã APPROVED có hiệu lực bao phủ ngày d không. */
+    public boolean isActiveOn(LocalDate d) {
+        if (!isApproved() || d == null) return false;
+        return !d.isBefore(startDate) && !d.isAfter(endDate);
     }
 
-    // ---------------- Getters / Setters ----------------
-    public int getId() {
-        return id;
+    public boolean isPending()   { return ST_PENDING.equalsIgnoreCase(status); }
+    public boolean isApproved()  { return ST_APPROVED.equalsIgnoreCase(status); }
+    public boolean isRejected()  { return ST_REJECTED.equalsIgnoreCase(status); }
+    public boolean isCancelled() { return ST_CANCELLED.equalsIgnoreCase(status); }
+
+    public boolean hasAttachment() { return attachmentName != null && !attachmentName.isBlank(); }
+
+    // ===== Alias cho JSP cũ =====
+    /** JSP thường dùng ${r.from} / ${r.to} với fmt:formatDate → trả Date. */
+    public Date getFrom() { return startDate == null ? null : java.sql.Date.valueOf(startDate); }
+    public Date getTo()   { return endDate   == null ? null : java.sql.Date.valueOf(endDate);   }
+    public String getFullName() { return fullName != null ? fullName : createdByName; }
+    public String getType()     { return type; }
+
+    /** Nếu dùng trực tiếp fmt:formatDate với start/end. */
+    public Date getStartDateDate() { return getFrom(); }
+    public Date getEndDateDate()   { return getTo();   }
+
+    // ===== LeaveType name fallback nếu không JOIN tên =====
+    public String getLeaveTypeName() {
+        if (leaveTypeName != null && !leaveTypeName.isBlank()) return leaveTypeName;
+        if (type == null) return null;
+        return switch (type.toUpperCase()) {
+            case "AL", "ANNUAL" -> "Annual Leave (Phép năm)";
+            case "SL", "SICK"   -> "Sick Leave (Nghỉ ốm)";
+            case "UL", "UNPAID" -> "Unpaid Leave (Không lương)";
+            case "WFH"          -> "Work From Home";
+            default              -> type;
+        };
     }
 
-    public void setId(int id) {
-        this.id = id;
+    // ========= Getters / Setters =========
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+
+    public Integer getUserId() { return userId; }
+    public void setUserId(Integer userId) { this.userId = userId; }
+
+    // Alias để DAO cũ map requester_id
+    public Integer getRequesterId() { return userId; }
+    public void setRequesterId(Integer v) { this.userId = v; }
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public void setType(String type) { this.type = type; }
+
+    public LocalDate getStartDate() { return startDate; }
+    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+
+    public LocalDate getEndDate() { return endDate; }
+    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+
+    // Alias cho DAO cũ dùng setFrom()/setTo() bằng LocalDate
+    public void setFrom(LocalDate d) { this.startDate = d; }
+    public void setTo(LocalDate d)   { this.endDate   = d; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getApprovedAt() { return approvedAt; }
+    public void setApprovedAt(LocalDateTime approvedAt) { this.approvedAt = approvedAt; }
+
+    public Integer getProcessedBy() { return processedBy; }
+    public void setProcessedBy(Integer processedBy) { this.processedBy = processedBy; }
+
+    public Integer getApprovedBy() { return approvedBy; }
+    public void setApprovedBy(Integer approvedBy) { this.approvedBy = approvedBy; }
+
+    // Alias để DAO có thể gọi setApproverId(...)
+    public Integer getApproverId() { return approvedBy; }
+    public void setApproverId(Integer v) { this.approvedBy = v; }
+
+    public Integer getLeaveTypeId() { return leaveTypeId; }
+    public void setLeaveTypeId(Integer leaveTypeId) { this.leaveTypeId = leaveTypeId; }
+
+    public String getManagerNote() { return managerNote; }
+    public void setManagerNote(String managerNote) { this.managerNote = managerNote; }
+
+    public String getApproveNote() { return approveNote; }
+    public void setApproveNote(String approveNote) { this.approveNote = approveNote; }
+
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+
+    public String getAttachmentName() { return attachmentName; }
+    public void setAttachmentName(String attachmentName) { this.attachmentName = attachmentName; }
+
+    public String getFullNameField() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+
+    public String getCreatedByName() { return createdByName; }
+    public void setCreatedByName(String createdByName) { this.createdByName = createdByName; }
+
+    public String getProcessedByName() { return processedByName; }
+    public void setProcessedByName(String processedByName) { this.processedByName = processedByName; }
+
+    public String getApprovedByName() { return approvedByName; }
+    public void setApprovedByName(String approvedByName) { this.approvedByName = approvedByName; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public Integer getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Integer departmentId) { this.departmentId = departmentId; }
+
+    public Integer getManagerId() { return managerId; }
+    public void setManagerId(Integer managerId) { this.managerId = managerId; }
+
+    public String getRequesterDepartment() { return requesterDepartment; }
+    public void setRequesterDepartment(String requesterDepartment) {
+        this.requesterDepartment = requesterDepartment == null ? null : requesterDepartment.trim();
     }
 
-    public String getTitle() {
-        return title;
-    }
+    public String getLeaveTypeNameRaw() { return leaveTypeName; }
+    public void setLeaveTypeName(String leaveTypeName) { this.leaveTypeName = leaveTypeName; }
 
-    public void setTitle(String title) {
-        this.title = title;
-    }
+    public List<RequestHistory> getHistory() { return history; }
+    public void setHistory(List<RequestHistory> history) { this.history = history; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public int getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(int createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public String getCreatedByName() {
-        return createdByName;
-    }
-
-    public void setCreatedByName(String createdByName) {
-        this.createdByName = createdByName;
-    }
-
-    public Integer getProcessedBy() {
-        return processedBy;
-    }
-
-    public void setProcessedBy(Integer processedBy) {
-        this.processedBy = processedBy;
-    }
-
-    public String getProcessedByName() {
-        return processedByName;
-    }
-
-    public void setProcessedByName(String processedByName) {
-        this.processedByName = processedByName;
-    }
-
-    public String getManagerNote() {
-        return managerNote;
-    }
-
-    public void setManagerNote(String managerNote) {
-        this.managerNote = managerNote;
-    }
-
-    public String getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(String department) {
-        this.department = department;
-    }
-
-    public int getManagerId() {
-        return managerId;
-    }
-
-    public void setManagerId(int managerId) {
-        this.managerId = managerId;
-    }
-
-    public void setAttachmentName(String v) {
-        this.attachmentName = v;
-    }
-
-    public List<RequestHistory> getHistory() {
-        return history;
-    }
-
-    public void setHistory(List<RequestHistory> history) {
-        this.history = history;
-    }
-
-    // ---------------- Object contracts ----------------
-    @Override
-    public String toString() {
-        return "Request{"
-                + "id=" + id
-                + ", title='" + title + '\''
-                + ", type='" + type + '\''
-                + ", reason='" + reason + '\''
-                + ", startDate=" + startDate
-                + ", endDate=" + endDate
-                + ", status='" + status + '\''
-                + ", createdBy=" + createdBy
-                + ", createdByName='" + createdByName + '\''
-                + ", processedBy=" + processedBy
-                + ", processedByName='" + processedByName + '\''
-                + ", department='" + department + '\''
-                + ", managerId=" + managerId
-                + ", attachmentName='" + attachmentName + '\''
-                + '}';
-    }
-
+    // ========= Object contracts =========
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof Request)) {
-            return false;
-        }
-        Request request = (Request) o;
-        return id == request.id;
+        if (this == o) return true;
+        if (!(o instanceof Request)) return false;
+        Request r = (Request) o;
+        return Objects.equals(id, r.id);
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
+    public int hashCode() { return Objects.hash(id); }
+
+    @Override
+    public String toString() {
+        return "Request{" +
+                "id=" + id +
+                ", userId=" + userId +
+                ", type='" + type + '\'' +
+                ", status='" + status + '\'' +
+                ", startDate=" + startDate +
+                ", endDate=" + endDate +
+                ", processedBy=" + processedBy +
+                ", approvedBy=" + approvedBy +
+                '}';
     }
 
-    // --- Alias cho DAO cũ dùng setFrom()/setTo() ---
-    public void setFrom(LocalDate fromDate) {
-        this.startDate = fromDate;
-    }
-
-    public void setTo(LocalDate toDate) {
-        this.endDate = toDate;
-    }
-
-    // === Fields ===
-    private Long approverId;           // dùng Long để cho phép null
-    private Long requesterId;          // dùng Long để cho phép null
-    private String requesterDepartment;
-
-    // === Getters (EL/JSP cần các getter này) ===
-    public Long getApproverId() {
-        return approverId;
-    }
-
-    public Long getRequesterId() {
-        return requesterId;
-    }
-
-    public String getRequesterDepartment() {
-        return requesterDepartment;
-    }
-
-    // === Setters — FIX lỗi UnsupportedOperationException ===
-    public void setApproverId(Long approverId) {
-        this.approverId = approverId;
-    }
-
-    // Giữ nguyên chữ ký bạn đang có (long) và hỗ trợ cả Long nếu cần
-    public void setRequesterId(long requesterId) {
-        this.requesterId = requesterId; // auto-box sang Long
-    }
-
-    // overload phòng khi nơi khác truyền vào Long (có thể null)
-    public void setRequesterId(Long requesterId) {
-        this.requesterId = requesterId;
-    }
-
-    public void setRequesterDepartment(String requesterDepartment) {
-        this.requesterDepartment = (requesterDepartment == null)
-                ? null
-                : requesterDepartment.trim();
-    }
-
-    // CÁI BẠN ĐANG THIẾU: setApprovedAt(...)
-    public void setApprovedAt(LocalDateTime approvedAt) {
-        this.approvedAt = approvedAt;
-    }
-
-// *** CÁI ĐANG THIẾU ***
-    public LocalDateTime getCreatedAt() {
-        LocalDateTime createdAt = null;
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-
-    // (tuỳ chọn) fluent style cho tiện khi map từ ResultSet
-    public Request withApproverId(Long v) {
-        this.approverId = v;
-        return this;
-    }
-
-    public Request withRequesterId(Long v) {
-        this.requesterId = v;
-        return this;
-    }
-
-    public Request withRequesterDepartment(String v) {
-        this.requesterDepartment = (v == null ? null : v.trim());
-        return this;
-    }
-
-private Integer userId;
-
-public void setUserId(Integer id) {
-    this.userId = id;
+  // map createdBy ↔ userId cho tương thích JSP/DAO cũ
+public void setCreatedBy(int createdBy) {
+    this.userId = createdBy;
 }
 
-  public Integer getUserId() {
-    return userId;
+public Integer getCreatedBy() {
+    return this.userId;
 }
-
-    public Object getLeaveTypeId() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
 
 }
