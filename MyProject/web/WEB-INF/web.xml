@@ -318,15 +318,23 @@
 
 <!-- web.xml -->
 <servlet>
-  <servlet-name>ForgotPasswordServlet</servlet-name>
-  <servlet-class>com.acme.leavemgmt.servlet.account.ForgotPasswordServlet</servlet-class>
+<servlet-name>ForgotPasswordServlet</servlet-name>
+<servlet-class>com.acme.leavemgmt.servlet.account.ForgotPasswordServlet</servlet-class>
 </servlet>
 <servlet-mapping>
-  <servlet-name>ForgotPasswordServlet</servlet-name>
-  <url-pattern>/forgot</url-pattern>
+<servlet-name>ForgotPasswordServlet</servlet-name>
+<url-pattern>/forgot</url-pattern>
 </servlet-mapping>
 
 
+<servlet>
+<servlet-name>ResetVerifyServlet</servlet-name>
+<servlet-class>com.acme.leavemgmt.servlet.account.ResetVerifyServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+<servlet-name>ResetVerifyServlet</servlet-name>
+<url-pattern>/forgot/verify</url-pattern>
+</servlet-mapping>
 
 <!-- Ví dụ trong AuthFilter: exclude các path công khai -->
 <init-param>

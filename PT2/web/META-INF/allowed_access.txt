@@ -1,7 +1,17 @@
-/
-/login
-/logout
+# Cho phép các URL này (1 dòng/1 URL hoặc prefix /*)
+#--- trang public
+/index.html
+/login.jsp
+
+#--- assets tĩnh
+/css/*
+/js/*
+/images/*
+/assets/*
+
+#--- ví dụ theo đề
 /student/create
 /student/update
-/assets/            # có thể whitelist cả 1 thư mục tĩnh
 
+#--- cho phép nhánh auth sau khi qua AuthFilter
+/auth/*

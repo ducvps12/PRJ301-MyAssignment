@@ -2,16 +2,12 @@
 <%@ taglib prefix="mytag" uri="http://acme.com/tags" %>
 <!DOCTYPE html>
 <html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>Demo Custom Tag</title>
-</head>
+<head><meta charset="UTF-8"><title>Tag Demo</title></head>
 <body>
-  <h1>Demo ToVietnameseDate</h1>
-  <p>Kết quả:
-    <strong><mytag:ToVietnameseDate value="${requestScope.data}" /></strong>
-  </p>
-
-  <p><a href="${pageContext.request.contextPath}/">Về trang chủ</a></p>
+  <p><strong><mytag:ToVietnameseDate value="${requestScope.data}" /></strong></p>
+  <!-- Ví dụ khác:
+  <mytag:ToVietnameseDate value="2024-10-30" />
+  <mytag:ToVietnameseDate value="30/10/2024" />
+  -->
 </body>
 </html>

@@ -3,6 +3,8 @@ package com.acme.leavemgmt.model;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
@@ -100,7 +102,7 @@ public class Request implements Serializable {
     public boolean hasAttachment() { return attachmentName != null && !attachmentName.isBlank(); }
 
     // ===== Alias cho JSP cũ =====
-    /** JSP thường dùng ${r.from} / ${r.to} với fmt:formatDate → trả Date. */
+    /** JSP thường dùng ${r.from} / ${r.to} với fmt:formatDate → trả Date (java.sql.Date). */
     public Date getFrom() { return startDate == null ? null : java.sql.Date.valueOf(startDate); }
     public Date getTo()   { return endDate   == null ? null : java.sql.Date.valueOf(endDate);   }
     public String getFullName() { return fullName != null ? fullName : createdByName; }
@@ -109,6 +111,33 @@ public class Request implements Serializable {
     /** Nếu dùng trực tiếp fmt:formatDate với start/end. */
     public Date getStartDateDate() { return getFrom(); }
     public Date getEndDateDate()   { return getTo();   }
+
+    /** ===== Compat cho JSP đang gọi ${req.startDateUtil} / ${req.endDateUtil} ===== */
+    public Date getStartDateUtil() {
+        if (startDate == null) return null;
+        return Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+    public Date getEndDateUtil() {
+        if (endDate == null) return null;
+        return Date.from(endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+
+    /** Chuỗi dải ngày gọn để hiển thị trực tiếp. */
+    public String getDateRangeText() {
+        if (startDate == null && endDate == null) return "";
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        if (startDate != null && endDate != null) {
+            return startDate.equals(endDate)
+                    ? startDate.format(fmt)
+                    : startDate.format(fmt) + " – " + endDate.format(fmt);
+        }
+        return (startDate != null ? startDate.format(fmt) : "")
+                + (endDate != null ? " – " + endDate.format(fmt) : "");
+    }
+
+    /** ISO string tiện log/API. */
+    public String getStartDateISO() { return startDate == null ? null : startDate.toString(); }
+    public String getEndDateISO()   { return endDate   == null ? null : endDate.toString();   }
 
     // ===== LeaveType name fallback nếu không JOIN tên =====
     public String getLeaveTypeName() {
@@ -215,6 +244,31 @@ public class Request implements Serializable {
     public List<RequestHistory> getHistory() { return history; }
     public void setHistory(List<RequestHistory> history) { this.history = history; }
 
+
+// ===== Attachment helpers for JSP =====
+
+/** URL xem/tải tệp đính kèm. JSP sẽ tự nối contextPath ở trước. */
+public String getAttachmentUrl() {
+    if (!hasAttachment() || id == null) return null;
+    // Nếu bạn có AttachmentServlet map "/request/attachment"
+    return "/request/attachment?id=" + id;
+    // Trường hợp bạn phục vụ file tĩnh theo tên, có thể dùng:
+    // return "/uploads/requests/" + java.net.URLEncoder.encode(attachmentName, java.nio.charset.StandardCharsets.UTF_8);
+}
+
+/** Alias cho nút Download (nếu JSP gọi). */
+public String getAttachmentDownloadUrl() {
+    return getAttachmentUrl();
+}
+
+/** Nhãn hiển thị cho link file. */
+public String getAttachmentLabel() {
+    return (attachmentName == null || attachmentName.isBlank())
+            ? "Tệp đính kèm"
+            : attachmentName.trim();
+}
+
+
     // ========= Object contracts =========
     @Override
     public boolean equals(Object o) {
@@ -241,13 +295,7 @@ public class Request implements Serializable {
                 '}';
     }
 
-  // map createdBy ↔ userId cho tương thích JSP/DAO cũ
-public void setCreatedBy(int createdBy) {
-    this.userId = createdBy;
-}
-
-public Integer getCreatedBy() {
-    return this.userId;
-}
-
+    // map createdBy ↔ userId cho tương thích JSP/DAO cũ
+    public void setCreatedBy(int createdBy) { this.userId = createdBy; }
+    public Integer getCreatedBy() { return this.userId; }
 }

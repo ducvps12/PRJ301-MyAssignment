@@ -2,6 +2,7 @@ package com.acme.leavemgmt.dao;
 
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.DBConnection;
+import static com.acme.leavemgmt.util.DBConnection.getConnection;
 import com.acme.leavemgmt.util.Passwords;
 import java.sql.*;
 import java.time.LocalDate;
@@ -79,24 +80,55 @@ public class UserDAO {
     // ==========================
     // Forgot password / helpers
     // ==========================
-
-    public User findByEmail(String email) throws SQLException {
-        final String sql = """
-            SELECT u.id, u.username, u.[password], u.full_name, u.role, u.department, u.status,
-                   u.email, u.phone, u.address, u.birthday, u.bio, u.avatar_url,
-                   u.created_at, u.updated_at,
-                   u.department_id, u.role_id, u.division_id, u.manager_id
-            FROM """ + T_USERS + """
-            u WHERE LOWER(u.email)=LOWER(?)
-        """;
-        try (Connection con = getConn();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, email);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? mapRow(rs) : null;
+// tìm user theo email (nếu chưa có)
+public User findByEmail(String email) throws Exception {
+    final String sql = """
+        SELECT user_id, username, full_name, email, password_hash
+        FROM [dbo].[Users]
+        WHERE email = ?
+    """;
+    try (var con = DBConnection.getConnection();
+         var ps  = con.prepareStatement(sql)) {
+        ps.setString(1, email);
+        try (var rs = ps.executeQuery()) {
+            if (rs.next()) {
+                User u = new User();
+                u.setUserId(rs.getInt("user_id"));
+                u.setUsername(rs.getString("username"));
+                u.setFullName(rs.getString("full_name"));
+                u.setEmail(rs.getString("email"));
+                u.setPasswordHash(rs.getString("password_hash"));
+                return u;
             }
+            return null;
         }
     }
+}
+
+// cập nhật mật khẩu theo email (hàm IDE đang báo thiếu)
+public boolean updatePasswordByEmail(String email, String passwordHash) throws Exception {
+    final String sql = """
+        UPDATE [dbo].[Users]
+           SET password_hash = ?
+         WHERE email = ?
+    """;
+    try (var con = DBConnection.getConnection();
+         var ps  = con.prepareStatement(sql)) {
+        ps.setString(1, passwordHash);
+        ps.setString(2, email);
+        return ps.executeUpdate() > 0;
+    }
+}
+
+
+public void updatePassword(int userId, String newHashedPassword) throws SQLException {
+final String sql = "UPDATE [dbo].[Users] SET password = ?, updated_at = SYSUTCDATETIME() WHERE user_id = ?";
+try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+ps.setString(1, newHashedPassword);
+ps.setInt(2, userId);
+ps.executeUpdate();
+}
+}
 
     public boolean updatePasswordHashed(int userId, String hashedPassword) throws SQLException {
         final String sql = "UPDATE " + T_USERS + " SET [password]=?, updated_at=SYSUTCDATETIME() WHERE id=?";
@@ -148,17 +180,7 @@ public class UserDAO {
         }
     }
 
-    public boolean updatePassword(int id, String hashed) {
-        final String sql = "UPDATE " + T_USERS + " SET [password] = ?, updated_at = SYSDATETIME() WHERE id = ?";
-        try (Connection c = getConn();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, hashed);
-            ps.setInt(2, id);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            throw new RuntimeException("updatePassword failed", e);
-        }
-    }
+   
 
     // ==========================
     // Queries / Profile
@@ -354,7 +376,7 @@ private static void safeSetStrReflect(Object bean, ResultSet rs, String col, Str
     // OAuth-lite helper
     // ==========================
 
-    public User createFromOAuth(User u) throws SQLException {
+    public User createFromOAuth(User u) throws SQLException, Exception {
         if (u == null || u.getEmail() == null) throw new IllegalArgumentException("email required");
 
         try (Connection con = getConn()) {

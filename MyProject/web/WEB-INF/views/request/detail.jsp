@@ -4,96 +4,88 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Chi tiết yêu cầu #${r.id}</title>
+  <title>Chi tiết yêu cầu #${empty r ? '' : r.id}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <%@ include file="/WEB-INF/views/common/_header.jsp" %>
 
   <style>
-    :root{
-      --bg:#f7f7f8; --card:#fff; --b:#e5e7eb; --muted:#6b7280;
-      --ok:#10b981; --warn:#f59e0b; --no:#ef4444; --info:#3b82f6;
-    }
+    :root{ --bg:#f7f7f8; --card:#fff; --b:#e5e7eb; --muted:#6b7280;
+           --ok:#10b981; --warn:#f59e0b; --no:#ef4444; --info:#3b82f6; }
     *{box-sizing:border-box}
     body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);margin:0;color:#0f172a}
     a{color:#111827;text-decoration:none}
     .wrap{max-width:1000px;margin:22px auto;padding:0 16px}
     .card{background:var(--card);border:1px solid var(--b);border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.04);padding:18px;margin-bottom:18px}
-
     .topbar{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:12px}
-    .breadcrumbs{font-size:13px;color:var(--muted)}
-    .breadcrumbs a{color:inherit}
+    .breadcrumbs{font-size:13px;color:var(--muted)} .breadcrumbs a{color:inherit}
     .title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .id {font-weight:600}
+    .id{font-weight:600}
     .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid var(--b);}
     .status-PENDING{background:#fffbeb;border-color:var(--warn);color:#92400e}
     .status-APPROVED{background:#ecfdf5;border-color:var(--ok);color:#065f46}
     .status-REJECTED{background:#fef2f2;border-color:var(--no);color:#991b1b}
     .status-INPROGRESS{background:#eff6ff;border-color:var(--info);color:#1e40af}
     .status-CANCELLED{background:#f3f4f6;border-color:#9ca3af;color:#374151}
-
     .muted{color:var(--muted)}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     @media (max-width:720px){ .grid{grid-template-columns:1fr} }
-
-    .kv{display:flex;gap:8px}
-    .kv b{min-width:140px}
+    .kv{display:flex;gap:8px} .kv b{min-width:140px}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-
     .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
     .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--b);background:#fff;cursor:pointer}
     .btn:hover{box-shadow:0 1px 0 rgba(0,0,0,.06)}
     .btn-primary{background:#111827;color:#fff;border-color:#111827}
     .btn-danger{border-color:var(--no);color:var(--no);background:#fff}
     .btn-icon{width:36px;height:36px;justify-content:center}
-
     .chip{display:inline-block;padding:3px 8px;border:1px dashed var(--b);border-radius:999px;font-size:12px;color:var(--muted)}
-
-    /* Timeline */
     .timeline{list-style:none;padding:0;margin:0}
     .timeline li{border-left:2px solid var(--b);margin-left:12px;padding-left:12px;padding-bottom:12px;position:relative}
     .timeline li::before{content:'';width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid var(--info);position:absolute;left:-7px;top:4px}
     .tag{font-size:11px;padding:2px 6px;border-radius:999px;border:1px solid var(--b);color:#334155;background:#f8fafc}
     .note{margin-top:4px;padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
-
-    /* Toast */
     .toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transform:translateY(6px);transition:all .25s}
     .toast.show{opacity:1;transform:none}
-
-    /* Tooltip */
-    .tip{position:relative}
-    .tip:hover .tiptext{opacity:1;transform:translateY(-2px)}
-    .tiptext{position:absolute;left:50%;transform:translate(-50%,0);bottom:calc(100% + 8px);opacity:.0;background:#111827;color:#fff;padding:6px 8px;border-radius:6px;white-space:nowrap;font-size:12px;pointer-events:none;transition:all .18s}
-
-    /* Minimal modal sheet */
+    .tip{position:relative} .tip:hover .tiptext{opacity:1;transform:translateY(-2px)}
+    .tiptext{position:absolute;left:50%;transform:translate(-50%,0);bottom:calc(100% + 8px);opacity:0;background:#111827;color:#fff;padding:6px 8px;border-radius:6px;white-space:nowrap;font-size:12px;pointer-events:none;transition:all .18s}
     dialog{border:none;border-radius:16px;box-shadow:0 20px 80px rgba(0,0,0,.18);padding:0}
-    .modal{padding:18px 18px 12px}
-    .modal .row{margin-top:10px}
+    .modal{padding:18px 18px 12px} .modal .row{margin-top:10px}
     textarea{width:100%;min-height:110px;border:1px solid var(--b);border-radius:12px;padding:10px;font:inherit}
-
-    @media print{
-      .topbar,.actions,.btn,.toast,dialog{display:none !important}
-      .card{box-shadow:none;border:none}
-      body{background:#fff}
-    }
+    @media print{.topbar,.actions,.btn,.toast,dialog{display:none !important} .card{box-shadow:none;border:none} body{background:#fff}}
   </style>
 </head>
 <body>
+<%-- ====== Chuẩn hoá context, user, role ====== --%>
+<c:set var="cp" value="${pageContext.request.contextPath}"/>
+<c:set var="me" value="${empty sessionScope.currentUser ? sessionScope.user : sessionScope.currentUser}"/>
+<c:set var="roleRaw" value="${empty me ? '' : (empty me.role ? (empty me.roleCode ? '' : me.roleCode) : me.role)}"/>
+<c:set var="R" value="${fn:toUpperCase(fn:trim(roleRaw))}"/>
+<c:set var="canApprove" value="${R=='ADMIN' or R=='HR' or R=='DIV_LEADER' or R=='TEAM_LEAD' or R=='MANAGER'}"/>
+<c:set var="canCancel" value="${not empty me and (me.userId == r.createdBy) and r.status=='PENDING'}"/>
+
+<c:choose>
+  <c:when test="${empty r}">
+    <div class="wrap">
+      <div class="card"><b>Không tìm thấy yêu cầu.</b>
+        <div class="actions" style="margin-top:8px">
+          <a class="btn" href="${cp}/request/list">← Quay lại danh sách</a>
+        </div>
+      </div>
+    </div>
+  </c:when>
+
+  <c:otherwise>
 <div class="wrap">
 
   <!-- Breadcrumbs + quick actions -->
   <div class="topbar">
     <div class="breadcrumbs">
-      <a href="${pageContext.request.contextPath}/">Trang chủ</a> ›
-      <a href="${pageContext.request.contextPath}/request/list">Danh sách</a> ›
-      Chi tiết
+      <a href="${cp}/">Trang chủ</a> › <a href="${cp}/request/list">Danh sách</a> › Chi tiết
     </div>
     <div class="actions">
-      <button class="btn btn-icon tip" id="copyLinkBtn" aria-label="Copy link" title="Copy link (Ctrl+C)">
-        🔗
+      <button class="btn btn-icon tip" id="copyLinkBtn" aria-label="Copy link" title="Copy link (Ctrl+C)">🔗
         <span class="tiptext">Sao chép liên kết</span>
       </button>
-      <button class="btn btn-icon tip" id="printBtn" aria-label="In" title="In (P)">
-        🖨️
+      <button class="btn btn-icon tip" id="printBtn" aria-label="In" title="In (P)">🖨️
         <span class="tiptext">In (phím P)</span>
       </button>
     </div>
@@ -104,11 +96,11 @@
       <h2 style="margin:0">Chi tiết yêu cầu <span class="id mono">#${r.id}</span></h2>
       <span class="badge status-${r.status}">
         <c:choose>
-          <c:when test="${r.status eq 'PENDING'}">⏳ PENDING</c:when>
-          <c:when test="${r.status eq 'INPROGRESS'}">⏳ Đang xử lý</c:when>
-          <c:when test="${r.status eq 'APPROVED'}">✅ Đã duyệt</c:when>
-          <c:when test="${r.status eq 'REJECTED'}">❌ Từ chối</c:when>
-          <c:otherwise>🛑 Đã hủy</c:otherwise>
+          <c:when test="${r.status eq 'PENDING'}"> PENDING</c:when>
+          <c:when test="${r.status eq 'INPROGRESS'}"> Đang xử lý</c:when>
+          <c:when test="${r.status eq 'APPROVED'}"> Đã duyệt</c:when>
+          <c:when test="${r.status eq 'REJECTED'}"> Từ chối</c:when>
+          <c:otherwise> Đã hủy</c:otherwise>
         </c:choose>
       </span>
       <c:if test="${not empty param.msg}">
@@ -116,7 +108,9 @@
       </c:if>
     </div>
 
-    <div class="muted" style="margin-top:6px">Người tạo: <c:out value='${r.createdByName}' default="(không rõ)"/></div>
+    <div class="muted" style="margin-top:6px">
+      Người tạo: <c:out value='${r.createdByName}' default="(không rõ)"/>
+    </div>
 
     <div class="grid" style="margin-top:12px">
       <div class="kv">
@@ -146,7 +140,7 @@
             <c:otherwise>—</c:otherwise>
           </c:choose>
           <c:if test="${r.days gt 0}">
-            &nbsp;<span class="chip"><fmt:formatNumber value="${r.days}" maxFractionDigits="1"/> ngày</span>
+            &nbsp;<span class="chip"><fmt:formatNumber value="${r.days}" maxFractionDigits="0"/> ngày</span>
           </c:if>
         </span>
       </div>
@@ -170,21 +164,13 @@
         </div>
       </c:if>
 
-      <c:if test="${not empty r.attachmentUrl or not empty r.attachmentPath or not empty r.attachmentName}">
+<c:if test="${not empty r.attachmentName}">
         <div style="grid-column:1/-1" class="kv">
           <b>Tệp đính kèm:</b>
           <div>
-            📎 <c:out value='${empty r.attachmentName ? "file" : r.attachmentName}'/>
-            <c:choose>
-              <c:when test="${not empty r.attachmentUrl}">
-                <a class="btn" style="padding:4px 8px;margin-left:8px"
-                   href="${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
-              </c:when>
-              <c:when test="${not empty r.attachmentPath}">
-                <a class="btn" style="padding:4px 8px;margin-left:8px"
-                   href="${pageContext.request.contextPath}/files/${r.attachmentPath}">Tải xuống</a>
-              </c:when>
-            </c:choose>
+            📎 <c:out value='${empty r.attachmentLabel ? r.attachmentName : r.attachmentLabel}'/>
+            <a class="btn" style="padding:4px 8px;margin-left:8px"
+               href="${cp}${r.attachmentUrl}" target="_blank" rel="noopener">Tải xuống</a>
           </div>
         </div>
       </c:if>
@@ -192,18 +178,13 @@
 
     <!-- Hành động -->
     <div class="actions">
-      <a class="btn" href="${pageContext.request.contextPath}/request/list">← Quay lại danh sách</a>
+      <a class="btn" href="${cp}/request/list">← Quay lại danh sách</a>
 
-      <!-- Lưu ý: tùy hệ thống session, có thể là currentUser; điều chỉnh nếu cần -->
-      <c:if test="${not empty sessionScope.user
-                   and sessionScope.user.roleCode eq 'MANAGER'
-                   and r.status eq 'PENDING'}">
-        <a class="btn btn-primary" href="${pageContext.request.contextPath}/request/approve?id=${r.id}">Duyệt / Từ chối</a>
+      <c:if test="${canApprove and r.status eq 'PENDING'}">
+        <a class="btn btn-primary" href="${cp}/request/approve?id=${r.id}">Duyệt / Từ chối</a>
       </c:if>
 
-      <c:if test="${not empty sessionScope.user
-                   and sessionScope.user.userId == r.createdBy
-                   and r.status eq 'PENDING'}">
+      <c:if test="${canCancel}">
         <button class="btn btn-danger" id="openCancel">Hủy yêu cầu</button>
       </c:if>
     </div>
@@ -212,7 +193,6 @@
   <!-- LỊCH SỬ -->
   <div class="card" id="history">
     <h3 style="margin-top:0">Lịch sử xử lý</h3>
-
     <c:catch var="histErr">
       <ul class="timeline">
         <c:forEach var="h" items="${r.history}">
@@ -239,8 +219,6 @@
         </c:if>
       </ul>
     </c:catch>
-
-    <!-- Ẩn nội dung lỗi để không phá bố cục nhưng vẫn cho phép bạn inspect -->
     <c:if test="${not empty histErr}">
       <div style="display:none" data-history-error="${histErr}"></div>
     </c:if>
@@ -249,9 +227,14 @@
 
 <!-- Cancel modal (native dialog) -->
 <dialog id="cancelDlg">
-  <form method="post" action="${pageContext.request.contextPath}/request/cancel" class="modal">
+  <form method="post" action="${cp}/request/cancel" class="modal">
     <h3 style="margin:0">Xác nhận hủy yêu cầu #${r.id}</h3>
     <input type="hidden" name="id" value="${r.id}">
+    <c:set var="csrfParam" value="${requestScope.csrfParam}"/>
+    <c:set var="csrfToken" value="${requestScope.csrfToken}"/>
+    <c:if test="${not empty csrfParam}">
+      <input type="hidden" name="${csrfParam}" value="${csrfToken}"/>
+    </c:if>
     <div class="row muted">Bạn chỉ có thể hủy khi trạng thái còn <b>PENDING</b>.</div>
     <div class="row">
       <label for="note"><b>Lý do hủy (tuỳ chọn)</b></label>
@@ -275,10 +258,8 @@
   };
 
   document.getElementById('copyLinkBtn')?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(location.href);
-      toast('Đã sao chép liên kết!');
-    } catch(e){ toast('Không thể sao chép.'); }
+    try { await navigator.clipboard.writeText(location.href); toast('Đã sao chép liên kết!'); }
+    catch(e){ toast('Không thể sao chép.'); }
   });
 
   document.getElementById('printBtn')?.addEventListener('click', () => window.print());
@@ -300,5 +281,7 @@
 </script>
 
 <%@ include file="/WEB-INF/views/common/_footer.jsp" %>
+  </c:otherwise>
+</c:choose>
 </body>
 </html>

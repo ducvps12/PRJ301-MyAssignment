@@ -1,8 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
-	 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	 xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
-	 version="6.0">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+         version="6.0"
+         metadata-complete="true">
 
+  <!-- ===== Filter B: allow-list toàn cục (chạy trước) ===== -->
+  <filter>
+    <filter-name>AllowedPathsFilter</filter-name>
+    <filter-class>com.acme.pt2.filter.AllowedPathsFilter</filter-class>
+    <init-param>
+      <param-name>allowFile</param-name>
+      <!-- Bạn đang để file trong Web Pages/META-INF -->
+      <param-value>/META-INF/allowed_access.txt</param-value>
+    </init-param>
+  </filter>
+  <filter-mapping>
+    <filter-name>AllowedPathsFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+    <dispatcher>REQUEST</dispatcher>
+    <dispatcher>FORWARD</dispatcher>
+  </filter-mapping>
+
+  <!-- ===== Filter A: chặn /auth/* nếu chưa login ===== -->
+  <filter>
+    <filter-name>AuthFilter</filter-name>
+    <filter-class>com.acme.pt2.filter.AuthFilter</filter-class>
+    <init-param>
+      <param-name>sessionAttr</param-name>
+      <param-value>currentUser</param-value>
+    </init-param>
+    <init-param>
+      <param-name>loginPage</param-name>
+      <param-value>/login.jsp</param-value>
+    </init-param>
+  </filter>
+  <filter-mapping>
+    <filter-name>AuthFilter</filter-name>
+    <url-pattern>/auth/*</url-pattern>
+    <dispatcher>REQUEST</dispatcher>
+    <dispatcher>FORWARD</dispatcher>
+  </filter-mapping>
+
+  <!-- Welcome -->
+  <welcome-file-list>
+    <welcome-file>index.html</welcome-file>
+    <welcome-file>index.jsp</welcome-file>
+  </welcome-file-list>
 </web-app>

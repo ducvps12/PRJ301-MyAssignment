@@ -8,7 +8,6 @@ import static com.acme.leavemgmt.util.DBConnection.getConnection;
 import java.sql.*;
 import java.sql.Date;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 
 public class RequestDAO {
@@ -181,25 +180,47 @@ public class RequestDAO {
         return 1; // fallback Admin (đổi nếu admin của bạn không phải id=1)
     }
 public int createRequest(Request r) throws SQLException {
-    // --- helpers ---
+    // ===== SQL variants =====
+    final String INS_V2_T_ID = """
+        INSERT INTO dbo.Requests
+          (employee_id, approver_id, from_date, to_date, reason, title, status)
+        OUTPUT INSERTED.id
+        VALUES (?, ?, ?, ?, ?, ?, N'PENDING')
+    """;
+    final String INS_V2_T_REQID =
+        INS_V2_T_ID.replace("OUTPUT INSERTED.id", "OUTPUT INSERTED.request_id");
+
     final String INS_V2_ID = """
         INSERT INTO dbo.Requests
-            (employee_id, approver_id, from_date, to_date, reason, status)
+          (employee_id, approver_id, from_date, to_date, reason, status)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, N'PENDING')
     """;
-    final String INS_V2_REQID = INS_V2_ID.replace("OUTPUT INSERTED.id", "OUTPUT INSERTED.request_id");
+    final String INS_V2_REQID =
+        INS_V2_ID.replace("OUTPUT INSERTED.id", "OUTPUT INSERTED.request_id");
 
+    final String INS_V1_T = """
+        INSERT INTO dbo.Requests
+          (user_id, type, status, reason, title, start_date, end_date, created_at)
+        OUTPUT INSERTED.id
+        VALUES (?, ?, ?, ?, ?, ?, ?, SYSDATETIME())
+    """;
     final String INS_V1 = """
         INSERT INTO dbo.Requests
-            (user_id, type, status, reason, start_date, end_date, created_at)
+          (user_id, type, status, reason, start_date, end_date, created_at)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME())
     """;
 
+    final String INS_V0_T = """
+        INSERT INTO dbo.Requests
+          (created_by, processed_by, start_date, end_date, reason, title, status)
+        OUTPUT INSERTED.id
+        VALUES (?, ?, ?, ?, ?, ?, N'PENDING')
+    """;
     final String INS_V0 = """
         INSERT INTO dbo.Requests
-            (created_by, processed_by, start_date, end_date, reason, status)
+          (created_by, processed_by, start_date, end_date, reason, status)
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, N'PENDING')
     """;
@@ -208,48 +229,74 @@ public int createRequest(Request r) throws SQLException {
         cn.setAutoCommit(false);
         Integer newId = null;
 
-        // ======= V2: employee/approver/from/to =======
+        // ===== V2 (ưu tiên): có title =====
         try {
-            newId = insertV2(cn, INS_V2_ID, r);            // OUTPUT INSERTED.id
-        } catch (SQLException tryReqId) {
-            // Nếu cột identity tên 'request_id' thay vì 'id'
+            newId = insertV2(cn, INS_V2_T_ID, r, true);
+        } catch (SQLException ex1) {
             try {
-                newId = insertV2(cn, INS_V2_REQID, r);     // OUTPUT INSERTED.request_id
-            } catch (SQLException ignoreV2) {
-                newId = null; // rơi xuống V1
+                newId = insertV2(cn, INS_V2_T_REQID, r, true);
+            } catch (SQLException ignore) { /* thử bản không title */ }
+        }
+
+        // ===== V2 fallback: không title =====
+        if (newId == null) {
+            try {
+                newId = insertV2(cn, INS_V2_ID, r, false);
+            } catch (SQLException ex2) {
+                try {
+                    newId = insertV2(cn, INS_V2_REQID, r, false);
+                } catch (SQLException ignore) { /* rơi xuống V1 */ }
             }
         }
 
-        // ======= V1: user_id/type/status/reason/start/end =======
+        // ===== V1 =====
         if (newId == null) {
-            try (PreparedStatement ps = cn.prepareStatement(INS_V1)) {
-                final String type = (r.getType() != null && !r.getType().isBlank()) ? r.getType() : "ANNUAL";
-                ps.setInt(1, orCreatedBy(r));                // user_id
-                ps.setString(2, type);                       // type
-                ps.setString(3, "PENDING");                  // status
-                ps.setString(4, r.getReason());              // reason
-                setLocalDateOrNull(ps, 5, r.getStartDate()); // start_date
-                setLocalDateOrNull(ps, 6, r.getEndDate());   // end_date
+            final String type = (r.getType() == null || r.getType().isBlank()) ? "ANNUAL" : r.getType();
 
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) newId = rs.getInt(1);
+            // có title
+            try (PreparedStatement ps = cn.prepareStatement(INS_V1_T)) {
+                ps.setInt(1, orCreatedBy(r));
+                ps.setString(2, type);
+                ps.setString(3, "PENDING");
+                if (r.getReason()!=null) ps.setNString(4, r.getReason()); else ps.setNull(4, java.sql.Types.NVARCHAR);
+                if (r.getTitle()!=null)  ps.setNString(5, r.getTitle());  else ps.setNull(5, java.sql.Types.NVARCHAR);
+                setLocalDateOrNull(ps, 6, r.getStartDate());
+                setLocalDateOrNull(ps, 7, r.getEndDate());
+                try (ResultSet rs = ps.executeQuery()) { if (rs.next()) newId = rs.getInt(1); }
+            } catch (SQLException noTitleCol) {
+                // không title
+                try (PreparedStatement ps = cn.prepareStatement(INS_V1)) {
+                    ps.setInt(1, orCreatedBy(r));
+                    ps.setString(2, type);
+                    ps.setString(3, "PENDING");
+                    if (r.getReason()!=null) ps.setNString(4, r.getReason()); else ps.setNull(4, java.sql.Types.NVARCHAR);
+                    setLocalDateOrNull(ps, 5, r.getStartDate());
+                    setLocalDateOrNull(ps, 6, r.getEndDate());
+                    try (ResultSet rs = ps.executeQuery()) { if (rs.next()) newId = rs.getInt(1); }
                 }
-            } catch (SQLException ignoreV1) {
-                newId = null; // rơi xuống V0
             }
         }
 
-        // ======= V0: created_by/processed_by/start/end/reason/status =======
+        // ===== V0 =====
         if (newId == null) {
-            try (PreparedStatement ps = cn.prepareStatement(INS_V0)) {
-                ps.setInt(1, orCreatedBy(r));                // created_by
-                setIntOrNull(ps, 2, r.getProcessedBy());     // processed_by
-                setLocalDateOrNull(ps, 3, r.getStartDate()); // start_date
-                setLocalDateOrNull(ps, 4, r.getEndDate());   // end_date
-                ps.setString(5, r.getReason());              // reason
-
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) newId = rs.getInt(1);
+            // có title
+            try (PreparedStatement ps = cn.prepareStatement(INS_V0_T)) {
+                ps.setInt(1, orCreatedBy(r));
+                setIntOrNull(ps, 2, r.getProcessedBy());
+                setLocalDateOrNull(ps, 3, r.getStartDate());
+                setLocalDateOrNull(ps, 4, r.getEndDate());
+                if (r.getReason()!=null) ps.setNString(5, r.getReason()); else ps.setNull(5, java.sql.Types.NVARCHAR);
+                if (r.getTitle()!=null)  ps.setNString(6, r.getTitle());  else ps.setNull(6, java.sql.Types.NVARCHAR);
+                try (ResultSet rs = ps.executeQuery()) { if (rs.next()) newId = rs.getInt(1); }
+            } catch (SQLException noTitleColV0) {
+                // không title
+                try (PreparedStatement ps = cn.prepareStatement(INS_V0)) {
+                    ps.setInt(1, orCreatedBy(r));
+                    setIntOrNull(ps, 2, r.getProcessedBy());
+                    setLocalDateOrNull(ps, 3, r.getStartDate());
+                    setLocalDateOrNull(ps, 4, r.getEndDate());
+                    if (r.getReason()!=null) ps.setNString(5, r.getReason()); else ps.setNull(5, java.sql.Types.NVARCHAR);
+                    try (ResultSet rs = ps.executeQuery()) { if (rs.next()) newId = rs.getInt(1); }
                 }
             }
         }
@@ -259,7 +306,6 @@ public int createRequest(Request r) throws SQLException {
             throw new SQLException("Không tạo được request mới (không xác định schema).");
         }
 
-        // ======= History: CREATED =======
         String creatorName = (r.getCreatedByName() != null ? r.getCreatedByName() : "SYSTEM");
         insertHistory(cn, newId, orCreatedBy(r), creatorName, "CREATED", null);
 
@@ -267,6 +313,29 @@ public int createRequest(Request r) throws SQLException {
         return newId;
     }
 }
+
+
+/* Overload hỗ trợ V2 có/không title */
+private Integer insertV2(Connection cn, String sql, Request r, boolean withTitle) throws SQLException {
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        int i = 1;
+        ps.setInt(i++, orCreatedBy(r));                // employee_id
+        setIntOrNull(ps, i++, r.getApproverId());      // approver_id
+        setLocalDateOrNull(ps, i++, r.getStartDate()); // from_date
+        setLocalDateOrNull(ps, i++, r.getEndDate());   // to_date
+        if (r.getReason()!=null) ps.setNString(i++, r.getReason());
+        else ps.setNull(i++, java.sql.Types.NVARCHAR);
+        if (withTitle) {
+            if (r.getTitle()!=null) ps.setNString(i++, r.getTitle());
+            else ps.setNull(i++, java.sql.Types.NVARCHAR);
+        }
+        try (ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? rs.getInt(1) : null;
+        }
+    }
+}
+
+
 
 /* ---------------- helpers ---------------- */
 
@@ -498,171 +567,276 @@ private static Integer insertV2(Connection cn, String sql, Request r) throws SQL
         return list;
     }
 
-    /**
-     * Lấy chi tiết đơn theo id (V2 → V1 → V0)
-     */
-    /**
-     * Lấy chi tiết đơn theo id (V2 → V1 → V0)
-     */
-    public Request findById(int id) throws SQLException {
-        final String sqlV2 = """
-        SELECT
-            lr.request_id   AS id,
-            CAST(NULL AS NVARCHAR(255))  AS title,
-            lr.reason,
-            lr.from_date    AS start_date,
-            lr.to_date      AS end_date,
-            lr.status,
-            lr.manager_note,
-            u_emp.full_name AS created_name,
-            lr.employee_id  AS created_by,
-            u_app.full_name AS processed_name,
-            lr.approver_id  AS processed_by,
-            COALESCE(lt.name, lt.code, lr.type) AS leaveTypeName
-        FROM [dbo].[Requests] lr
-        JOIN [dbo].[Users] u_emp      ON u_emp.user_id = lr.employee_id
-        LEFT JOIN [dbo].[Users] u_app ON u_app.user_id = lr.approver_id
-        LEFT JOIN [dbo].[LeaveTypes] lt
-               ON (lt.id = lr.leave_type_id OR lt.code = lr.type)
-        WHERE lr.request_id = ?
-    """;
+  /** Lấy chi tiết đơn theo id (thử V2 có title → V2 fallback → V1 có title → V1 fallback → V0 có title → V0 fallback) */
+public Request findById(int id) throws SQLException {
+   // V2 có title
+final String sqlV2_T = """
+  SELECT
+    lr.request_id AS id,
+    lr.title,
+    lr.reason,
+    lr.from_date  AS start_date,
+    lr.to_date    AS end_date,
+    lr.status,
+    lr.manager_note,
+    u_emp.full_name AS created_name,
+    lr.employee_id  AS created_by,
+    u_app.full_name AS processed_name,
+    lr.approver_id  AS processed_by,
+    COALESCE(lt.name, lt.code, lr.type) AS leaveTypeName
+  FROM dbo.Requests lr
+  JOIN dbo.Users u_emp      ON u_emp.id = lr.employee_id
+  LEFT JOIN dbo.Users u_app ON u_app.id = lr.approver_id
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = lr.leave_type_id OR lt.code = lr.type)
+  WHERE lr.request_id = ?
+""";
 
-        final String sqlV1 = """
-        SELECT
-            r.id            AS id,
-            CAST(NULL AS NVARCHAR(255))  AS title,
-            r.reason,
-            r.start_date    AS start_date,
-            r.end_date      AS end_date,
-            r.status,
-            CAST(NULL AS NVARCHAR(400))  AS manager_note,
-            u.full_name     AS created_name,
-            r.user_id       AS created_by,
-            CAST(NULL AS NVARCHAR(200))  AS processed_name,
-            CAST(NULL AS INT)            AS processed_by,
-            COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
-        FROM [dbo].[Requests] r
-        JOIN [dbo].[Users] u ON u.id = r.user_id
-        LEFT JOIN [dbo].[LeaveTypes] lt
-               ON (lt.id = r.leave_type_id OR lt.code = r.type)
-        WHERE r.id = ?
-    """;
+// V2 fallback (schema chưa có title)
+final String sqlV2 = """
+  SELECT
+    lr.request_id AS id,
+    CAST(NULL AS NVARCHAR(255)) AS title,
+    lr.reason,
+    lr.from_date  AS start_date,
+    lr.to_date    AS end_date,
+    lr.status,
+    lr.manager_note,
+    u_emp.full_name AS created_name,
+    lr.employee_id  AS created_by,
+    u_app.full_name AS processed_name,
+    lr.approver_id  AS processed_by,
+    COALESCE(lt.name, lt.code, lr.type) AS leaveTypeName
+  FROM dbo.Requests lr
+  JOIN dbo.Users u_emp      ON u_emp.id = lr.employee_id
+  LEFT JOIN dbo.Users u_app ON u_app.id = lr.approver_id
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = lr.leave_type_id OR lt.code = lr.type)
+  WHERE lr.request_id = ?
+""";
 
-        final String sqlV0 = """
-        SELECT
-            r.id            AS id,
-            CAST(NULL AS NVARCHAR(255))  AS title,   -- bỏ r.title để tránh lỗi
-            r.reason,
-            r.start_date    AS start_date,
-            r.end_date      AS end_date,
-            r.status,
-            r.manager_note,
-            u_emp.full_name AS created_name,
-            r.created_by    AS created_by,
-            u_app.full_name AS processed_name,
-            r.processed_by  AS processed_by,
-            COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
-        FROM [dbo].[Requests] r
-        JOIN [dbo].[Users] u_emp      ON u_emp.id = r.created_by
-        LEFT JOIN [dbo].[Users] u_app ON u_app.id = r.processed_by
-        LEFT JOIN [dbo].[LeaveTypes] lt
-               ON (lt.id = r.leave_type_id OR lt.code = r.type)
-        WHERE r.id = ?
-    """;
+// V1 có title
+final String sqlV1_T = """
+  SELECT
+    r.id AS id,
+    r.title,
+    r.reason,
+    r.start_date AS start_date,
+    r.end_date   AS end_date,
+    r.status,
+    CAST(NULL AS NVARCHAR(400)) AS manager_note,
+    u.full_name  AS created_name,
+    r.user_id    AS created_by,
+    CAST(NULL AS NVARCHAR(200)) AS processed_name,
+    CAST(NULL AS INT) AS processed_by,
+    COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+  FROM dbo.Requests r
+  JOIN dbo.Users u ON u.id = r.user_id
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = r.leave_type_id OR lt.code = r.type)
+  WHERE r.id = ?
+""";
 
-        try (Connection cn = DBConnection.getConnection()) {
-            // V2
-            try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
-                ps.setInt(1, id);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        Request r = mapRowBasic(rs);
-                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
-                        r.setHistory(listHistory(cn, id));
-                        return r;
-                    }
+// V1 fallback
+final String sqlV1 = """
+  SELECT
+    r.id AS id,
+    CAST(NULL AS NVARCHAR(255)) AS title,
+    r.reason,
+    r.start_date AS start_date,
+    r.end_date   AS end_date,
+    r.status,
+    CAST(NULL AS NVARCHAR(400)) AS manager_note,
+    u.full_name  AS created_name,
+    r.user_id    AS created_by,
+    CAST(NULL AS NVARCHAR(200)) AS processed_name,
+    CAST(NULL AS INT) AS processed_by,
+    COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+  FROM dbo.Requests r
+  JOIN dbo.Users u ON u.id = r.user_id
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = r.leave_type_id OR lt.code = r.type)
+  WHERE r.id = ?
+""";
+
+// V0 có title
+final String sqlV0_T = """
+  SELECT
+    r.id AS id,
+    r.title,
+    r.reason,
+    r.start_date AS start_date,
+    r.end_date   AS end_date,
+    r.status,
+    r.manager_note,
+    u_emp.full_name AS created_name,
+    r.created_by    AS created_by,
+    u_app.full_name AS processed_name,
+    r.processed_by  AS processed_by,
+    COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+  FROM dbo.Requests r
+  JOIN dbo.Users u_emp      ON u_emp.id = r.created_by
+  LEFT JOIN dbo.Users u_app ON u_app.id = r.processed_by
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = r.leave_type_id OR lt.code = r.type)
+  WHERE r.id = ?
+""";
+
+// V0 fallback
+final String sqlV0 = """
+  SELECT
+    r.id AS id,
+    CAST(NULL AS NVARCHAR(255)) AS title,
+    r.reason,
+    r.start_date AS start_date,
+    r.end_date   AS end_date,
+    r.status,
+    r.manager_note,
+    u_emp.full_name AS created_name,
+    r.created_by    AS created_by,
+    u_app.full_name AS processed_name,
+    r.processed_by  AS processed_by,
+    COALESCE(lt.name, lt.code, r.type) AS leaveTypeName
+  FROM dbo.Requests r
+  JOIN dbo.Users u_emp      ON u_emp.id = r.created_by
+  LEFT JOIN dbo.Users u_app ON u_app.id = r.processed_by
+  LEFT JOIN dbo.LeaveTypes lt ON (lt.id = r.leave_type_id OR lt.code = r.type)
+  WHERE r.id = ?
+""";
+
+
+    try (Connection cn = DBConnection.getConnection()) {
+        // V2 có title
+        try (PreparedStatement ps = cn.prepareStatement(sqlV2_T)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
                 }
-            } catch (SQLException ignoreV2) {
-                /* fallback */ }
+            }
+        } catch (SQLException ignore) {}
 
-            // V1
-            try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
-                ps.setInt(1, id);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        Request r = mapRowBasic(rs);
-                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
-                        r.setHistory(listHistory(cn, id));
-                        return r;
-                    }
+        // V2 fallback
+        try (PreparedStatement ps = cn.prepareStatement(sqlV2)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
                 }
-            } catch (SQLException ignoreV1) {
-                /* fallback */ }
+            }
+        } catch (SQLException ignore) {}
 
-            // V0
-            try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
-                ps.setInt(1, id);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        Request r = mapRowBasic(rs);
-                        r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
-                        r.setHistory(listHistory(cn, id));
-                        return r;
-                    }
+        // V1 có title
+        try (PreparedStatement ps = cn.prepareStatement(sqlV1_T)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
+                }
+            }
+        } catch (SQLException ignore) {}
+
+        // V1 fallback
+        try (PreparedStatement ps = cn.prepareStatement(sqlV1)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
+                }
+            }
+        } catch (SQLException ignore) {}
+
+        // V0 có title
+        try (PreparedStatement ps = cn.prepareStatement(sqlV0_T)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
+                }
+            }
+        } catch (SQLException ignore) {}
+
+        // V0 fallback
+        try (PreparedStatement ps = cn.prepareStatement(sqlV0)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Request r = mapRowBasic(rs);
+                    r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+                    r.setHistory(listHistory(cn, id));
+                    return r;
                 }
             }
         }
-        return null;
     }
+    return null;
+}
+// ===== Helpers dùng chung trong RequestDAO =====
 
-    private static String safeGetString(ResultSet rs, String col) {
+/** Lấy NVARCHAR an toàn (trả null nếu cột không tồn tại hoặc lỗi) */
+private static String safeGetString(ResultSet rs, String col) {
+    try {
+        // Ưu tiên getNString để giữ Unicode (tiếng Việt)
+        return rs.getNString(col);
+    } catch (SQLException e) {
         try {
             return rs.getString(col);
-        } catch (SQLException e) {
+        } catch (SQLException ex) {
             return null;
         }
     }
+}
 
-    /**
-     * Map các cột chung từ ResultSet → Request (không mở thêm kết nối)
-     */
-    private Request mapRowBasic(ResultSet rs) throws SQLException {
-        Request r = new Request();
-        r.setId(rs.getInt("id"));
+/** Map các cột cơ bản của Request từ 1 dòng ResultSet (đa schema V2/V1/V0) */
+private Request mapRowBasic(ResultSet rs) throws SQLException {
+    Request r = new Request();
 
-        // cột 'title' có thể NULL (V2/V1), an toàn hóa:
-        try {
-            String title = rs.getString("title");
-            r.setTitle(title);
-        } catch (SQLException ignore) {
-            r.setTitle(null);
-        }
+    r.setId(rs.getInt("id"));
 
-        r.setReason(rs.getString("reason"));
+    // NVARCHAR
+    r.setTitle(safeGetString(rs, "title"));
+    r.setReason(safeGetString(rs, "reason"));
+    r.setManagerNote(safeGetString(rs, "manager_note"));
 
-        Date sd = rs.getDate("start_date");
-        Date ed = rs.getDate("end_date");
-        r.setStartDate(sd != null ? sd.toLocalDate() : null);
-        r.setEndDate(ed != null ? ed.toLocalDate() : null);
+    // DATE
+    java.sql.Date sd = rs.getDate("start_date");
+    java.sql.Date ed = rs.getDate("end_date");
+    r.setStartDate(sd != null ? sd.toLocalDate() : null);
+    r.setEndDate(ed != null ? ed.toLocalDate() : null);
 
-        r.setStatus(rs.getString("status"));
-        r.setManagerNote(rs.getString("manager_note"));
+    // STATUS
+    r.setStatus(safeGetString(rs, "status"));
 
-        r.setCreatedBy(rs.getInt("created_by"));
-        r.setCreatedByName(rs.getString("created_name"));
+    // Người tạo / người xử lý (có schema không có processed_by)
+    Object cbObj = null;
+    try { cbObj = rs.getObject("created_by"); } catch (SQLException ignore) {}
+    if (cbObj != null) r.setCreatedBy(((Number) cbObj).intValue());
 
-        int pb = rs.getInt("processed_by");
-        r.setProcessedBy(rs.wasNull() ? null : pb);
-        r.setProcessedByName(rs.getString("processed_name"));
+    r.setCreatedByName(safeGetString(rs, "created_name"));
+    r.setProcessedByName(safeGetString(rs, "processed_name"));
 
-        // Nếu bạn có trường đính kèm:
-        try {
-            r.setAttachmentName(rs.getString("attachment_name"));
-        } catch (SQLException ignoreAttachment) {
-            /* không có cột này thì bỏ qua */ }
+    Object pbObj = null;
+    try { pbObj = rs.getObject("processed_by"); } catch (SQLException ignore) {}
+    r.setProcessedBy(pbObj == null ? null : ((Number) pbObj).intValue());
 
-        return r;
-    }
+    // leaveTypeName được set ở ngoài findById() (như bạn đang làm), hoặc có thể:
+    // r.setLeaveTypeName(safeGetString(rs, "leaveTypeName"));
+
+    // Nếu có cột đính kèm thì lấy thêm (không bắt buộc)
+    try { r.setAttachmentName(safeGetString(rs, "attachment_name")); } catch (Exception ignore) {}
+
+    return r;
+}
 
     // =======================
     // ===== LỊCH SỬ (History)
@@ -1399,65 +1573,71 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
         }
     }
 
-    // =====================================================
-    // =============== MAPPING HELPER ======================
-    // =====================================================
-    /**
-     * Helper chuyển ResultSet → Request (title không có trong schema → để null)
-     */
-    private Request mapRow(ResultSet rs) throws SQLException {
-        Request r = new Request();
-        r.setId(rs.getInt("id"));
-        r.setTitle(null);
-        r.setReason(rs.getString("reason"));
-        r.setStartDate(rs.getDate("start_date").toLocalDate());
-        r.setEndDate(rs.getDate("end_date").toLocalDate());
-        r.setStatus(rs.getString("status"));
+   // =====================================================
+// =============== MAPPING HELPER ======================
+// =====================================================
+/** ResultSet -> Request (không đòi hỏi cột 'title') */
+private Request mapRow(ResultSet rs) throws SQLException {
+    Request r = new Request();
+    r.setId(rs.getInt("id"));
+    r.setUserId(rs.getInt("user_id"));
+    r.setType(safeGet(rs, "type"));
+    r.setStatus(safeGet(rs, "status"));
+    r.setReason(safeGet(rs, "reason"));
 
-        
-        try {
-            r.setManagerNote(rs.getString("manager_note"));
-        } catch (SQLException ignore) {
-            r.setManagerNote(null);
-        }
+    java.sql.Date sd = rs.getDate("start_date");
+    java.sql.Date ed = rs.getDate("end_date");
+    r.setFrom(sd == null ? null : sd.toLocalDate());
+    r.setTo(ed == null ? null : ed.toLocalDate());
 
-        Object created = null, processed = null;
-        try {
-            created = rs.getObject("created_by");
-        } catch (SQLException ignore) {
-        }
-        try {
-            processed = rs.getObject("processed_by");
-        } catch (SQLException ignore) {
-        }
+    r.setManagerNote(safeGet(rs, "manager_note"));
+    r.setProcessedBy((Integer)(rs.getObject("processed_by")==null? null : rs.getInt("processed_by")));
+    r.setApprovedBy((Integer)(rs.getObject("approved_by")==null ? null : rs.getInt("approved_by")));
 
-        r.setCreatedBy(created == null ? 0 : ((Number) created).intValue());
-        r.setProcessedBy(processed == null ? null : ((Number) processed).intValue());
-    r.setTitle(rs.getString("title"));
+    try {
+        java.sql.Timestamp ct = rs.getTimestamp("created_at");
+        java.sql.Timestamp ap = rs.getTimestamp("approved_at");
+        r.setCreatedAt(ct == null ? null : ct.toLocalDateTime());
+        r.setApprovedAt(ap == null ? null : ap.toLocalDateTime());
+    } catch (SQLException ignore) {}
 
-        return r;
-    }  // <-- đảm bảo có dấu đóng method ở đây
+    // nếu SELECT không cấp full_name thì tự fallback
+    String name = safeGet(rs, "full_name");
+    if (name == null || name.isBlank()) name = "User #" + r.getUserId();
+    r.setFullName(name);
 
-  public int create(Request r) throws SQLException {
+    r.setTitle(null);
+    return r;
+}
+
+public int create(Request r) throws SQLException {
     final String sql =
         "INSERT INTO dbo.Requests " +
         "(user_id, type, status, reason, start_date, end_date, leave_type_id) " +
-        "VALUES (?, ?, 'pending', ?, ?, ?, ?)";
+        "VALUES (?, ?, 'PENDING', ?, ?, ?, ?)";
 
     try (Connection cn = DBConnection.getConnection();
          PreparedStatement ps = cn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
         ps.setInt(1, r.getUserId());
-        ps.setString(2, r.getType());          // ví dụ: 'ANNUAL', 'SICK', ...
+        ps.setString(2, r.getType());
         ps.setString(3, r.getReason());
 
-        if (r.getStartDate() != null) ps.setDate(4, java.sql.Date.valueOf(r.getStartDate()));
-        else ps.setNull(4, java.sql.Types.DATE);
+        // from (java.util.Date -> java.sql.Date)
+        if (r.getFrom() != null) {
+            ps.setDate(4, new java.sql.Date(r.getFrom().getTime()));
+        } else {
+            ps.setNull(4, java.sql.Types.DATE);
+        }
 
-        if (r.getEndDate() != null) ps.setDate(5, java.sql.Date.valueOf(r.getEndDate()));
-        else ps.setNull(5, java.sql.Types.DATE);
+        // to (java.util.Date -> java.sql.Date)
+        if (r.getTo() != null) {
+            ps.setDate(5, new java.sql.Date(r.getTo().getTime()));
+        } else {
+            ps.setNull(5, java.sql.Types.DATE);
+        }
 
-        if (r.getLeaveTypeId() != null) ps.setInt(6, (int) r.getLeaveTypeId());
+        if (r.getLeaveTypeId() != null) ps.setInt(6, r.getLeaveTypeId());
         else ps.setNull(6, java.sql.Types.INTEGER);
 
         ps.executeUpdate();
@@ -1469,19 +1649,19 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
 
 
 // Trong RequestDAO
-
-  public boolean updateStatusIfPending(int id, String newStatus, int actorId, String note) throws SQLException {
+public boolean updateStatusIfPending(int id, String newStatus, int actorId, String note) throws SQLException {
     try (Connection cn = getConnection()) {
-        switch (newStatus == null ? "" : newStatus.toUpperCase()) {
+        String ns = (newStatus == null ? "" : newStatus.trim().toUpperCase());
+        switch (ns) {
             case "APPROVED": {
                 String sql = """
                     UPDATE dbo.Requests
-                    SET status = 'APPROVED',
-                        approved_by = ?, 
-                        approved_at = SYSDATETIME(),
-                        approve_note = ?,
-                        updated_at = SYSDATETIME()
-                    WHERE id = ? AND UPPER(status) = 'PENDING'
+                       SET status='APPROVED',
+                           approved_by = ?,
+                           approved_at = SYSDATETIME(),
+                           approve_note = ?,
+                           updated_at = SYSDATETIME()
+                     WHERE id = ? AND status = 'PENDING'
                 """;
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
                     ps.setInt(1, actorId);
@@ -1494,20 +1674,20 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
             case "CANCELLED": {
                 String sql = """
                     UPDATE dbo.Requests
-                    SET status = ?,
-                        processed_by = ?,              -- ✅ ghi đúng cột này
-                        manager_note = CASE
-                            WHEN ? IS NULL OR LTRIM(RTRIM(?)) = '' THEN manager_note
-                            WHEN manager_note IS NULL OR manager_note = '' THEN ?
-                            ELSE CONCAT(manager_note, CHAR(10), ?)
-                        END,
-                        updated_at = SYSDATETIME()
-                    WHERE id = ? AND UPPER(status) IN ('PENDING','INPROGRESS')
+                       SET status = ?,
+                           processed_by = ?,
+                           manager_note = CASE
+                               WHEN ? IS NULL OR LTRIM(RTRIM(?))='' THEN manager_note
+                               WHEN manager_note IS NULL OR manager_note='' THEN ?
+                               ELSE CONCAT(manager_note, CHAR(10), ?)
+                           END,
+                           updated_at = SYSDATETIME()
+                     WHERE id = ? AND status IN ('PENDING','INPROGRESS')
                 """;
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
-                    ps.setString(1, newStatus);
-                    ps.setInt(2, actorId);
                     String n = safeNote(note);
+                    ps.setString(1, ns);
+                    ps.setInt(2, actorId);
                     ps.setString(3, n);
                     ps.setString(4, n);
                     ps.setString(5, n);
@@ -1522,46 +1702,41 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
     }
 }
 
-   public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
+
+public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
     if (me == null || reqObj == null) return false;
 
-    final String role = me.getRole() == null ? "" : me.getRole().toUpperCase();
+    final String role = (me.getRole() == null ? "" : me.getRole().toUpperCase());
     final int requestId = reqObj.getId();
 
-    // Nhóm “duyệt tất”
     if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role) || "HR_ADMIN".equals(role)) {
         return true;
     }
 
-    // Chốt cột đúng theo DB hiện tại: Requests.user_id
     final String BASE_JOIN = """
         FROM dbo.Requests r
-        JOIN dbo.Users    u ON u.id = r.user_id
-        WHERE r.id = ?
-        """;
+        JOIN dbo.Users    u ON u.user_id = r.user_id  -- PK/FK chuẩn
+       WHERE r.id = ?
+    """;
 
     try (Connection cn = getConnection()) {
         switch (role) {
             case "TEAM_LEAD": {
-                // TEAM_LEAD chỉ duyệt khi là manager trực tiếp của nhân viên tạo đơn
+                // là quản lý trực tiếp của requester
                 final String sql = "SELECT 1 " + BASE_JOIN + " AND u.manager_id = ?";
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
                     ps.setInt(1, requestId);
-                    ps.setInt(2, me.getId());
-                    try (ResultSet rs = ps.executeQuery()) {
-                        return rs.next();
-                    }
+                    ps.setInt(2, me.getUserId());
+                    try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
                 }
             }
             case "DIV_LEADER": {
-                // DIV_LEADER duyệt khi nhân viên cùng department với mình
+                // cùng department
                 final String sql = "SELECT 1 " + BASE_JOIN + " AND u.department = ?";
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
                     ps.setInt(1, requestId);
-                    ps.setString(2, me.getDepartment());
-                    try (ResultSet rs = ps.executeQuery()) {
-                        return rs.next();
-                    }
+                    ps.setString(2, me.getDepartment()); // ví dụ: 'IT','HR','SALE'
+                    try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
                 }
             }
             default:
@@ -1570,213 +1745,150 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
     }
 }
 
-    // ĐẾM nhân sự active theo phòng ban (Users.status = 1)
-    public int countHeadcountActiveByDept(String dept) throws SQLException {
-        final String sql = """
-            SELECT COUNT(*)
-              FROM dbo.Users
-             WHERE status = 1
-               AND department = ?
-        """;
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, dept);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+
+public int countHeadcountActiveByDept(String dept) throws SQLException {
+    final String sql = """
+        SELECT COUNT(*) FROM dbo.Users
+         WHERE status = 1 AND department = ?
+    """;
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, dept);
+        try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
     }
+}
 
-    // ĐẾM đơn PENDING theo phòng ban + optional khoảng ngày
-    public int countPendingByDept(String dept, LocalDate from, LocalDate to) throws SQLException {
-        StringBuilder sb = new StringBuilder("""
-            SELECT COUNT(*)
-              FROM dbo.Requests r
-              LEFT JOIN dbo.Users u ON u.id = r.created_by
-             WHERE r.status = 'pending'
-               AND COALESCE(r.department, u.department) = ?
-        """);
-        if (from != null) {
-            sb.append(" AND r.start_date >= ? ");
-        }
-        if (to != null) {
-            sb.append(" AND r.end_date   <= ? ");
-        }
+public int countPendingByDept(String dept, LocalDate from, LocalDate to) throws SQLException {
+    StringBuilder sb = new StringBuilder("""
+        SELECT COUNT(*)
+          FROM dbo.Requests r
+          JOIN dbo.Users u ON u.user_id = r.user_id
+         WHERE r.status = 'PENDING'
+           AND u.department = ?
+    """);
+    if (from != null) sb.append(" AND r.start_date >= ? ");
+    if (to   != null) sb.append(" AND r.end_date   <= ? ");
 
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
-            int i = 1;
-            ps.setString(i++, dept);
-            if (from != null) {
-                ps.setDate(i++, Date.valueOf(from));
-            }
-            if (to != null) {
-                ps.setDate(i++, Date.valueOf(to));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
+        int i=1; ps.setString(i++, dept);
+        if (from != null) ps.setDate(i++, Date.valueOf(from));
+        if (to   != null) ps.setDate(i++, Date.valueOf(to));
+        try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
     }
+}
 
-    // ĐẾM đơn APPROVED trong tháng hiện tại theo phòng
-    public int countApprovedThisMonthByDept(String dept) throws SQLException {
-        final String sql = """
-            SELECT COUNT(*)
-              FROM dbo.Requests r
-              LEFT JOIN dbo.Users u ON u.id = r.created_by
-             WHERE r.status = 'approved'
-               AND COALESCE(r.department, u.department) = ?
-               AND YEAR(r.approved_at) = YEAR(GETDATE())
-               AND MONTH(r.approved_at) = MONTH(GETDATE())
-        """;
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, dept);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+public int countApprovedThisMonthByDept(String dept) throws SQLException {
+    final String sql = """
+        SELECT COUNT(*)
+          FROM dbo.Requests r
+          JOIN dbo.Users u ON u.user_id = r.user_id
+         WHERE r.status = 'APPROVED'
+           AND u.department = ?
+           AND YEAR(r.approved_at) = YEAR(GETDATE())
+           AND MONTH(r.approved_at) = MONTH(GETDATE())
+    """;
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, dept);
+        try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
     }
+}
 
-    // Tử số: tổng APPROVED theo phòng
-    public int countApprovalNumerator(String dept) throws SQLException {
-        final String sql = """
-            SELECT COUNT(*)
-              FROM dbo.Requests r
-              LEFT JOIN dbo.Users u ON u.id = r.created_by
-             WHERE r.status = 'approved'
-               AND COALESCE(r.department, u.department) = ?
-        """;
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, dept);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+public int countApprovalNumerator(String dept) throws SQLException {
+    final String sql = """
+        SELECT COUNT(*)
+          FROM dbo.Requests r
+          JOIN dbo.Users u ON u.user_id = r.user_id
+         WHERE r.status = 'APPROVED' AND u.department = ?
+    """;
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, dept);
+        try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
     }
+}
 
-    // Mẫu số: tổng (APPROVED + REJECTED) theo phòng
-    public int countApprovalDenominator(String dept) throws SQLException {
-        final String sql = """
-            SELECT COUNT(*)
-              FROM dbo.Requests r
-              LEFT JOIN dbo.Users u ON u.id = r.created_by
-             WHERE r.status IN ('approved','rejected')
-               AND COALESCE(r.department, u.department) = ?
-        """;
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, dept);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
-        }
+public int countApprovalDenominator(String dept) throws SQLException {
+    final String sql = """
+        SELECT COUNT(*)
+          FROM dbo.Requests r
+          JOIN dbo.Users u ON u.user_id = r.user_id
+         WHERE r.status IN ('APPROVED','REJECTED') AND u.department = ?
+    """;
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, dept);
+        try (ResultSet rs = ps.executeQuery()) { rs.next(); return rs.getInt(1); }
     }
+}
 
-    // Danh sách đơn PENDING (dùng cho bảng “Đơn chờ duyệt”)
-    public List<Request> findPendingList(String dept, LocalDate from, LocalDate to) throws SQLException {
-       StringBuilder sb = new StringBuilder("""
-    SELECT DISTINCT
-           r.id,
-           r.created_by,
-           u.full_name      AS createdByName,
-           r.type,
-           r.reason,
-           r.start_date,
-           r.end_date,
-           r.status,
-           COALESCE(r.department, u.department) AS dept
-      FROM dbo.Requests r
-      LEFT JOIN dbo.Users u ON u.id = r.created_by
-     WHERE r.status = 'pending'
-       AND COALESCE(r.department, u.department) = ?
-""");
 
-        if (from != null) {
-            sb.append(" AND r.start_date >= ? ");
-        }
-        if (to != null) {
-            sb.append(" AND r.end_date   <= ? ");
-        }
-        sb.append(" ORDER BY r.created_at DESC ");
+public List<Request> findPendingList(String dept, LocalDate from, LocalDate to) throws SQLException {
+   StringBuilder sb = new StringBuilder("""
+       SELECT r.id, r.user_id AS created_by, u.full_name AS createdByName,
+              r.type, r.reason, r.start_date, r.end_date, r.status, u.department AS dept
+         FROM dbo.Requests r
+         JOIN dbo.Users u ON u.user_id = r.user_id
+        WHERE r.status = 'PENDING' AND u.department = ?
+   """);
+   if (from != null) sb.append(" AND r.start_date >= ? ");
+   if (to   != null) sb.append(" AND r.end_date   <= ? ");
+   sb.append(" ORDER BY r.created_at DESC ");
 
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
-            int i = 1;
-            ps.setString(i++, dept);
-            if (from != null) {
-                ps.setDate(i++, Date.valueOf(from));
-            }
-            if (to != null) {
-                ps.setDate(i++, Date.valueOf(to));
-            }
+   try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sb.toString())) {
+       int i=1; ps.setString(i++, dept);
+       if (from != null) ps.setDate(i++, Date.valueOf(from));
+       if (to   != null) ps.setDate(i++, Date.valueOf(to));
+       try (ResultSet rs = ps.executeQuery()) {
+           List<Request> list = new ArrayList<>();
+           while (rs.next()) {
+               Request r = new Request();
+               r.setId(rs.getInt("id"));
+               r.setCreatedBy(rs.getInt("created_by"));
+               r.setCreatedByName(rs.getString("createdByName"));
+               r.setType(rs.getString("type"));
+               r.setReason(rs.getString("reason"));
+               java.sql.Date sd = rs.getDate("start_date"), ed = rs.getDate("end_date");
+               r.setFrom(sd==null?null:sd.toLocalDate());
+               r.setTo(ed==null?null:ed.toLocalDate());
+               r.setStatus(rs.getString("status"));
+               r.setDepartment(rs.getString("dept"));
+               list.add(r);
+           }
+           return list;
+       }
+   }
+}
 
-            try (ResultSet rs = ps.executeQuery()) {
-                List<Request> list = new ArrayList<>();
-                while (rs.next()) {
-                    Request r = new Request();
-                    r.setId(rs.getInt("id"));
-                    r.setCreatedBy(rs.getInt("created_by"));
-                    r.setCreatedByName(rs.getString("createdByName"));
-                    r.setType(rs.getString("type"));
-                    r.setReason(rs.getString("reason"));
-                    Date sd = rs.getDate("start_date");
-                    Date ed = rs.getDate("end_date");
-                    r.setStartDate(sd != null ? sd.toLocalDate() : null);
-                    r.setEndDate(ed != null ? ed.toLocalDate() : null);
-                    r.setStatus(rs.getString("status"));
-                    r.setDepartment(rs.getString("dept"));
-                    list.add(r);
-                }
-                return list;
-            }
-        }
-    }
-
-    // Danh sách “Đang nghỉ hôm nay” (đã APPROVED & ngày hôm nay nằm trong khoảng)
-    public List<Request> findTodayOff(String dept, LocalDate today) throws SQLException {
-      final String sql = """
-    SELECT DISTINCT
-           r.id,
-           r.created_by,
-           u.full_name      AS createdByName,
-           r.type,
-           r.start_date,
-           r.end_date,
-           COALESCE(r.department, u.department) AS dept
-      FROM dbo.Requests r
-      LEFT JOIN dbo.Users u ON u.id = r.created_by
-     WHERE r.status = 'approved'
-       AND COALESCE(r.department, u.department) = ?
-       AND ? BETWEEN r.start_date AND r.end_date
-     ORDER BY u.full_name
-""";
-
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, dept);
-            ps.setDate(2, Date.valueOf(today));
-
-            try (ResultSet rs = ps.executeQuery()) {
-                List<Request> list = new ArrayList<>();
-                while (rs.next()) {
-                    Request r = new Request();
-                    r.setId(rs.getInt("id"));
-                    r.setCreatedBy(rs.getInt("created_by"));
-                    r.setCreatedByName(rs.getString("createdByName"));
-                    r.setType(rs.getString("type"));
-                    Date sd = rs.getDate("start_date");
-                    Date ed = rs.getDate("end_date");
-                    r.setStartDate(sd != null ? sd.toLocalDate() : null);
-                    r.setEndDate(ed != null ? ed.toLocalDate() : null);
-                    r.setDepartment(rs.getString("dept"));
-                    r.setStatus("approved");
-                    list.add(r);
-                }
-                return list;
-            }
-        }
-    }
+public List<Request> findTodayOff(String dept, LocalDate today) throws SQLException {
+  final String sql = """
+      SELECT r.id, r.user_id AS created_by, u.full_name AS createdByName,
+             r.type, r.start_date, r.end_date, u.department AS dept
+        FROM dbo.Requests r
+        JOIN dbo.Users u ON u.user_id = r.user_id
+       WHERE r.status='APPROVED'
+         AND u.department = ?
+         AND ? BETWEEN r.start_date AND r.end_date
+       ORDER BY u.full_name
+  """;
+  try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+      ps.setString(1, dept);
+      ps.setDate(2, Date.valueOf(today));
+      try (ResultSet rs = ps.executeQuery()) {
+          List<Request> list = new ArrayList<>();
+          while (rs.next()) {
+              Request r = new Request();
+              r.setId(rs.getInt("id"));
+              r.setCreatedBy(rs.getInt("created_by"));
+              r.setCreatedByName(rs.getString("createdByName"));
+              r.setType(rs.getString("type"));
+              java.sql.Date sd = rs.getDate("start_date"), ed = rs.getDate("end_date");
+              r.setFrom(sd==null?null:sd.toLocalDate());
+              r.setTo(ed==null?null:ed.toLocalDate());
+              r.setDepartment(rs.getString("dept"));
+              r.setStatus("APPROVED");
+              list.add(r);
+          }
+          return list;
+      }
+  }
+}
 
     private boolean hasRole(int userId, String... roleCodes) throws SQLException {
         String in = String.join(",", java.util.Collections.nCopies(roleCodes.length, "?"));
@@ -1794,49 +1906,39 @@ public int duplicateFrom(int srcId, int newUserId, String newUserName,
         }
     }
 
-    // Kiểm tra: me có quyền xử lý đơn này không (admin/div leader/manager trực tiếp)
-    public boolean canProcessRequest(int requestId, User me) throws SQLException {
-        try (Connection cn = DBConnection.getConnection()) {
-            // Ví dụ logic:
-            // - ADMIN: role_code='ADMIN' -> pass
-            // - Leader/Manager: là quản lý trực tiếp của requester HOẶC cùng phòng và có role LEAD
-            String sql
-                    = "SELECT 1 "
-                    + "FROM Requests r "
-                    + "JOIN Users u ON u.id = r.created_by "
-                    + "WHERE r.id=? AND ("
-                    + "  ? IN (SELECT ur.user_id FROM UserRoles ur JOIN Roles ro ON ur.role_id=ro.id WHERE ro.code IN ('ADMIN')) "
-                    + "  OR u.manager_id = ? "
-                    + "  OR (u.dept_id = (SELECT dept_id FROM Users WHERE id=?) AND "
-                    + "      EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles ro ON ur.role_id=ro.id WHERE ur.user_id=? AND ro.code IN ('DIV_LEAD','LEAD')) )"
-                    + ")";
-            try (PreparedStatement ps = cn.prepareStatement(sql)) {
-                ps.setInt(1, requestId);
-                ps.setInt(2, me.getId());
-                ps.setInt(3, me.getId());
-                ps.setInt(4, me.getId());
-                ps.setInt(5, me.getId());
-                try (ResultSet rs = ps.executeQuery()) {
-                    return rs.next();
-                }
-            }
-        }
-    }
+ public boolean canProcessRequest(int requestId, User me) throws SQLException {
+    // ADMIN thì pass nhanh
+    if (hasRole(me.getUserId(), "ADMIN", "SYS_ADMIN", "HR_ADMIN")) return true;
 
-    // Duyệt/Từ chối
-    public boolean processDecision(int requestId, int approverId, boolean approve, String note) throws SQLException {
-        String sql
-                = "UPDATE Requests "
-                + "SET status=?, processed_by=?, processed_at=GETDATE(), decision_note=? "
-                + "WHERE id=? AND status='Inprogress'";
-        try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, approve ? "Approved" : "Rejected");
-            ps.setInt(2, approverId);
-            ps.setString(3, note);
-            ps.setInt(4, requestId);
-            return ps.executeUpdate() == 1;
-        }
+    String sql = """
+        SELECT 1
+          FROM Requests r
+          JOIN Users u ON u.user_id = r.user_id
+         WHERE r.id = ?
+           AND (
+                 u.manager_id = ?                                      -- quản lý trực tiếp
+              OR (u.department = ? AND EXISTS (
+                    SELECT 1 FROM UserRoles ur
+                    JOIN Roles ro ON ur.role_id = ro.id
+                   WHERE ur.user_id = ? AND ro.code IN ('DIV_LEADER','TEAM_LEAD','LEADER')
+                 ))
+           )
+    """;
+    try (Connection cn = DBConnection.getConnection(); PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setInt(1, requestId);
+        ps.setInt(2, me.getUserId());
+        ps.setString(3, me.getDepartment());
+        ps.setInt(4, me.getUserId());
+        try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
     }
+}
+
+public boolean processDecision(int requestId, int approverId, boolean approve, String note) throws SQLException {
+    return updateStatusIfPending(requestId, approve ? "APPROVED" : "REJECTED", approverId, note);
+}
+
+
+
 public List<Request> dedupe(List<Request> raw) {
     Map<Integer, Request> map = new LinkedHashMap<>();
     for (Request r : raw) {
@@ -1844,61 +1946,76 @@ public List<Request> dedupe(List<Request> raw) {
     }
     return new ArrayList<>(map.values());
 }
-
-// === API chính bạn cần ===
-public List<Request> findPendingForApprover(User me) throws SQLException {
-    // Chuẩn hóa role
-    String role = (me.getRoleCode() != null ? me.getRoleCode() : me.getRole());
-    role = (role == null ? "" : role.trim().toUpperCase());
-
-    final String BASE =
-        "SELECT DISTINCT r.*, u.full_name AS full_name, u.department_id AS requester_dept " +
-        "FROM dbo.Requests r " +
-        "JOIN dbo.Users u ON u.user_id = r.user_id " +
-        "WHERE r.status = 'PENDING' ";
-
-    // 1️⃣ ADMIN thấy tất cả PENDING
-    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role)) {
-        String sql = BASE + "ORDER BY r.created_at DESC";
-        return query(sql);
+// chạy query và map
+private List<Request> runAndMap(String sql, Object... params) throws SQLException {
+    try (Connection cn = DBConnection.getConnection();
+         PreparedStatement ps = cn.prepareStatement(sql)) {
+        for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+        List<Request> out = new java.util.ArrayList<>();
+        try (ResultSet rs = ps.executeQuery()) { while (rs.next()) out.add(mapRow(rs)); }
+        return out;
     }
-
-    // 2️⃣ LEADER / MANAGER / HR
-    if ("DIV_LEADER".equals(role) || "TEAM_LEAD".equals(role)
-        || "MANAGER".equals(role) || "LEADER".equals(role)
-        || "HR_ADMIN".equals(role)) {
-
-        String sql =
-            "WITH sub AS ( " +
-            "    SELECT u.user_id FROM dbo.Users u WHERE u.manager_id = ? " +
-            "    UNION ALL " +
-            "    SELECT u2.user_id FROM dbo.Users u2 JOIN sub s ON u2.manager_id = s.user_id " +
-            ") " +
-            BASE +
-            "AND ( " +
-            "      u.department_id = ? " +          // cùng phòng
-            "   OR r.processed_by = ? " +           // được assign xử lý
-            "   OR r.approved_by  = ? " +           // được assign duyệt
-            "   OR u.user_id IN (SELECT user_id FROM sub) " + // cấp dưới
-            ") " +
-            "ORDER BY r.created_at DESC OPTION (MAXRECURSION 100)";
-
-        return query(sql,
-            me.getUserId(),           // manager_id cho CTE sub
-            me.getDepartmentId(),     // phòng ban leader
-            me.getUserId(),           // processed_by
-            me.getUserId()            // approved_by
-        );
-    }
-
-    // 3️⃣ User thường: chỉ xem đơn được gán cho mình duyệt/xử lý
-    String sql =
-        BASE +
-        "AND (r.processed_by = ? OR r.approved_by = ?) " +
-        "ORDER BY r.created_at DESC";
-
-    return query(sql, me.getUserId(), me.getUserId());
 }
+
+public List<Request> findPendingForApprover(User me) throws SQLException {
+    String role = (me.getRoleCode()!=null ? me.getRoleCode() : me.getRole());
+    role = role==null ? "" : role.trim().toUpperCase();
+    final int meId = (me.getUserId()!=0 ? me.getUserId() : me.getId());
+    final String myDept = (me.getDepartment()==null ? "" : me.getDepartment().trim());
+
+    // 3 biến thể BASE
+    final String BASE1 = """
+        SELECT r.id, r.user_id, r.type, r.status, r.reason,
+               r.start_date, r.end_date,
+               r.processed_by, r.approved_by, r.approved_at,
+               r.manager_note, r.created_at,
+               u.full_name AS full_name
+          FROM dbo.Requests r
+          JOIN dbo.Users u ON u.user_id = r.user_id
+         WHERE UPPER(r.status)='PENDING'
+    """;
+    final String BASE2 = BASE1.replace("u.user_id = r.user_id","u.id = r.user_id");
+    final String BASE3 = """
+        SELECT r.id, r.user_id, r.type, r.status, r.reason,
+               r.start_date, r.end_date,
+               r.processed_by, r.approved_by, r.approved_at,
+               r.manager_note, r.created_at,
+               CAST(NULL AS nvarchar(255)) AS full_name
+          FROM dbo.Requests r
+         WHERE UPPER(r.status)='PENDING'
+    """;
+
+    // ADMIN/SYS_ADMIN/HR_ADMIN
+    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role) || "HR_ADMIN".equals(role)) {
+        try { return runAndMap(BASE1 + " ORDER BY r.created_at DESC"); }
+        catch (SQLException e1) {
+            try { return runAndMap(BASE2 + " ORDER BY r.created_at DESC"); }
+            catch (SQLException e2) { return runAndMap(BASE3 + " ORDER BY r.created_at DESC"); }
+        }
+    }
+
+    // LEADER/MANAGER/DIV_LEADER/TEAM_LEAD
+    if ("DIV_LEADER".equals(role) || "TEAM_LEAD".equals(role)
+        || "MANAGER".equals(role) || "LEADER".equals(role)) {
+
+        String TAIL = " AND (u.department = ? OR r.processed_by = ? OR r.approved_by = ?) " +
+                      " ORDER BY r.created_at DESC";
+        try { return runAndMap(BASE1 + TAIL, myDept, meId, meId); }
+        catch (SQLException e1) {
+            try { return runAndMap(BASE2 + TAIL, myDept, meId, meId); }
+            catch (SQLException e2) {
+                // cuối cùng: bỏ JOIN, ít nhất vẫn xem được đơn được assign cho mình
+                return runAndMap(BASE3 + " AND (r.processed_by=? OR r.approved_by=?) ORDER BY r.created_at DESC",
+                                 meId, meId);
+            }
+        }
+    }
+
+    // User thường
+    return runAndMap(BASE3 + " AND (r.processed_by=? OR r.approved_by=?) ORDER BY r.created_at DESC",
+                     meId, meId);
+}
+
 
 
 
@@ -2084,7 +2201,61 @@ private String safeNote(String note, int maxLen) {
     return n;
 }
 
+/** Tạo bản sao đơn: copy type, reason, dates, title, leave_type_id...
+ *  user_id/new created_by = newUserId, status = PENDING, các trường duyệt reset về NULL.
+ *  Trả về id mới.
+ */
+/** Nhân bản 1 đơn: copy các trường chính, reset trạng thái về PENDING,
+ *  gán user hiện tại làm created_by; KHÔNG copy file đính kèm/ghi chú duyệt.
+ *  Trả về id mới.
+ */
+/** Duplicate 1 đơn: copy fields chính, reset status về PENDING.
+ *  KHÔNG đụng vào created_by (vì có thể là computed).
+ *  Trả về id mới.
+ */
+public int duplicateRequest(int sourceId, int newUserId) throws SQLException {
+    final String sql = """
+        INSERT INTO dbo.Requests
+            (user_id, type, status, reason, start_date, end_date,
+             created_at, updated_at, processed_by, manager_note,
+             leave_type_id, approved_by, approved_at, approve_note, title)
+        SELECT
+             ?,            -- user_id mới (người thao tác)
+             r.type,
+             'PENDING',
+             r.reason,
+             r.start_date, r.end_date,
+             SYSDATETIME(),
+             SYSDATETIME(),
+             NULL,               -- processed_by
+             NULL,               -- manager_note
+             r.leave_type_id,
+             NULL, NULL, NULL,   -- approved_* reset
+             r.title
+        FROM dbo.Requests r
+        WHERE r.id = ?
+        """;
 
+    try (var con = getConnection();
+         var ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+        ps.setInt(1, newUserId);
+        ps.setInt(2, sourceId);
+        int n = ps.executeUpdate();
+        if (n == 0) throw new SQLException("Duplicate failed, source not found: " + sourceId);
+        try (var rs = ps.getGeneratedKeys()) {
+            if (rs.next()) return rs.getInt(1);
+        }
+    }
+
+    // Fallback khi driver không trả generated keys
+    try (var con = getConnection();
+         var ps = con.prepareStatement("SELECT CAST(SCOPE_IDENTITY() AS INT)")) {
+        try (var rs = ps.executeQuery()) {
+            if (rs.next()) return rs.getInt(1);
+        }
+    }
+    throw new SQLException("Cannot retrieve new id after duplicate");
+}
 
 
 }

@@ -1,45 +1,39 @@
-
-
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
 
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="${sessionScope.theme != null ? sessionScope.theme : 'auto'}">
 <head>
   <meta charset="UTF-8">
   <title>Tạo đơn nghỉ phép</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
-
-  <!-- CSS đã tách riêng -->
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/create.css">
- 
 </head>
 <body>
-    <%@ include file="/WEB-INF/views/common/_header.jsp" %>
-    <style>
-  /* Buộc hiện vùng actions + nút */
-  .actions{display:flex !important; gap:8px; margin-top:12px}
-  .btn{display:inline-flex !important; align-items:center; gap:6px;
-       padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px;
-       background:#111827; color:#fff}
-  .btn-ghost,.btn-muted{background:#fff; color:#111827}
+  <%@ include file="/WEB-INF/views/common/_header.jsp" %>
 
-  /* Modal mặc định ẩn, chỉ hiện khi có .open */
-  .modal{display:none}
-  .modal.open{display:flex}
-</style>
+  <c:set var="cp" value="${pageContext.request.contextPath}"/>
+  <!-- CSRF theo Csrf.protect(req): server đã set vào requestScope -->
+  <c:set var="csrfParam" value="${requestScope.csrfParam}" />
+  <c:set var="csrfToken" value="${requestScope.csrfToken}" />
 
-    
+  <style>
+    .actions{display:flex!important;gap:8px;margin-top:12px}
+    .btn{display:inline-flex!important;align-items:center;gap:6px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#111827;color:#fff}
+    .btn-ghost,.btn-muted{background:#fff;color:#111827}
+    .modal{display:none}
+    .modal.open{display:flex}
+  </style>
+
   <div class="wrap">
     <div class="page-title">
       <h2 style="margin:0">Tạo đơn nghỉ phép</h2>
-      <span class="badge">Trạng thái sau khi gửi: Inprogress</span>
+      <span class="badge">Trạng thái sau khi gửi: <b>PENDING</b></span>
     </div>
     <p class="sub">Điền thông tin dưới đây. Bạn có thể xem trước và lưu bản nháp; nhấn <b>Ctrl+Enter</b> để gửi nhanh.</p>
 
     <div class="card" role="region" aria-label="Tạo đơn">
-      <!-- Thông báo server -->
       <c:if test="${not empty error}">
         <div class="alert alert-error" aria-live="polite">${error}</div>
       </c:if>
@@ -48,10 +42,22 @@
       </c:if>
 
       <!-- Form -->
-      <form id="leaveForm" method="post" action="${pageContext.request.contextPath}/request/create" novalidate>
-        <input type="hidden" name="_csrf" value="${sessionScope._csrf}"/>
+      <form id="leaveForm" method="post" action="${cp}/request/create" novalidate>
+        <input type="hidden" name="${csrfParam}" value="${csrfToken}"/>
 
-        <!-- Title -->
+        <!-- Type (bắt buộc vì servlet đọc 'type') -->
+        <label for="type">Loại nghỉ <span class="req">*</span></label>
+        <div class="field">
+          <c:set var="tp" value="${empty param.type ? 'ANNUAL' : param.type}" />
+          <select id="type" name="type" required>
+            <option value="ANNUAL" ${tp=='ANNUAL'?'selected':''}>Annual leave (nghỉ phép năm)</option>
+            <option value="SICK"   ${tp=='SICK'?'selected':''}>Sick leave (nghỉ ốm)</option>
+            <option value="WFH"    ${tp=='WFH'?'selected':''}>WFH (làm việc tại nhà)</option>
+            <option value="UNPAID" ${tp=='UNPAID'?'selected':''}>Unpaid leave (không lương)</option>
+          </select>
+        </div>
+
+        <!-- Title (tùy chọn) -->
         <label for="title">Tiêu đề (tùy chọn)</label>
         <div class="field">
           <input id="title" name="title" type="text" placeholder="VD: Nghỉ phép cá nhân"
@@ -93,7 +99,7 @@
         <div class="kpi" id="kpiBar">
           <span class="pill" id="rangeInfo">Chưa chọn khoảng ngày</span>
           <span class="pill" id="daysInfo" style="display:none"></span>
-          <span class="pill" id="warnInfo" style="display:none;color:#b45309;background:#fff7ed;border-color:#fed7aa">Đến ngày < Từ ngày</span>
+          <span class="pill" id="warnInfo" style="display:none;color:#b45309;background:#fff7ed;border-color:#fed7aa">Đến ngày &lt; Từ ngày</span>
         </div>
 
         <!-- Actions -->
@@ -102,7 +108,7 @@
             <span class="btn-label">Gửi đơn</span>
           </button>
           <button class="btn btn-ghost" id="previewBtn" type="button">Xem trước</button>
-          <a class="btn btn-muted" href="${pageContext.request.contextPath}/request/list">Quay lại</a>
+          <a class="btn btn-muted" href="${cp}/request/list">Quay lại</a>
           <button class="btn btn-muted" id="saveDraft" type="button" title="Lưu bản nháp vào máy">Lưu nháp</button>
           <button class="btn btn-muted" id="clearDraft" type="button" title="Xóa bản nháp">Xóa nháp</button>
         </div>
@@ -125,12 +131,14 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <%-- ===== Script ===== --%>
   <script>
     (function(){
       const $ = (s,sc)=> (sc||document).querySelector(s);
       const $$ = (s,sc)=> (sc||document).querySelectorAll(s);
 
       const form = $('#leaveForm');
+      const typeSel = $('#type');
       const title = $('#title');
       const reason = $('#reason');
       const reasonCounter = $('#reasonCounter');
@@ -150,7 +158,6 @@
       const closePreview = $('#closePreview');
       const toast = $('#toast');
 
-      // ---- Helpers
       const todayStr = (d=new Date()) => d.toISOString().slice(0,10);
       const parse = (v)=> v? new Date(v+"T00:00:00") : null;
       const diffDaysInc = (a,b)=> Math.floor((b-a)/86400000)+1;
@@ -173,7 +180,6 @@
         }
       }
 
-      // ---- Reason counter + early validation
       function syncReason(){
         const len = reason.value.trim().length;
         reasonCounter.textContent = len;
@@ -182,7 +188,6 @@
       }
       reason.addEventListener('input', syncReason); syncReason();
 
-      // ---- Date constraints + KPIs
       function syncDateMinMax(){
         const t = todayStr();
         s.min = t; e.min = s.value || t;
@@ -191,9 +196,7 @@
       }
       function syncKPIs(){
         syncDateMinMax();
-       rangeInfo.textContent = (s.value && e.value)
-  ? ('Khoảng: ' + s.value + ' → ' + e.value)
-  : 'Chưa chọn khoảng ngày';
+        rangeInfo.textContent = (s.value && e.value) ? ('Khoảng: ' + s.value + ' → ' + e.value) : 'Chưa chọn khoảng ngày';
         warnInfo.style.display = 'none';
         daysInfo.style.display = 'none';
         if(s.value && e.value){
@@ -202,8 +205,7 @@
             warnInfo.style.display = 'inline-flex';
           }else{
             daysInfo.style.display = 'inline-flex';
-           daysInfo.textContent = 'Số ngày (bao gồm 2 đầu): ' + diffDaysInc(sd, ed);
-
+            daysInfo.textContent = 'Số ngày (bao gồm 2 đầu): ' + diffDaysInc(sd, ed);
           }
         }
       }
@@ -211,7 +213,6 @@
       e.addEventListener('change', syncKPIs);
       syncKPIs();
 
-      // ---- Quick chips
       $$('.chip').forEach(ch=>{
         ch.addEventListener('click', ()=>{
           const t = new Date();
@@ -235,10 +236,9 @@
         });
       });
 
-      // ---- Local draft
       const KEY = 'leave_form_draft_v1';
       function saveDraft(){
-        const data = { title:title.value, reason:reason.value, s:s.value, e:e.value };
+        const data = { type:typeSel.value, title:title.value, reason:reason.value, s:s.value, e:e.value };
         localStorage.setItem(KEY, JSON.stringify(data));
         showToast('Đã lưu nháp trên máy.');
       }
@@ -246,6 +246,7 @@
         try{
           const raw = localStorage.getItem(KEY); if(!raw) return;
           const d = JSON.parse(raw);
+          if(d.type!=null)  typeSel.value = d.type;
           if(d.title!=null) title.value = d.title;
           if(d.reason!=null) reason.value = d.reason;
           if(d.s!=null) s.value = d.s;
@@ -262,27 +263,23 @@
       clearDraftBtn.addEventListener('click', clearDraft);
       loadDraft();
 
-      // ---- Preview
       function openPreview(){
-        // Basic validate
         const errs = [];
         if(reason.value.trim().length < 20) errs.push('Lý do tối thiểu 20 ký tự.');
         if(!s.value || !e.value) errs.push('Vui lòng chọn đầy đủ Từ ngày / Đến ngày.');
         if(s.value && e.value && parse(e.value) < parse(s.value)) errs.push('Khoảng ngày không hợp lệ.');
-        if(errs.length){
-          showToast(errs[0]);
-          reason.focus();
-          return;
-        }
-        // Fill grid
+        if(!typeSel.value) errs.push('Vui lòng chọn loại nghỉ.');
+        if(errs.length){ showToast(errs[0]); reason.focus(); return; }
+
         previewGrid.innerHTML = '';
         const rows = [
+          ['Loại nghỉ', typeSel.options[typeSel.selectedIndex].text],
           ['Tiêu đề', title.value || '(trống)'],
           ['Lý do', reason.value.trim()],
           ['Từ ngày', s.value],
           ['Đến ngày', e.value],
-          ['Số ngày', s.value && e.value ? diffDaysInc(parse(s.value), parse(e.value)) : '-'],
-          ['Trạng thái sau khi gửi', 'Inprogress']
+          ['Số ngày', s.value && e.value ? Math.floor((parse(e.value)-parse(s.value))/86400000)+1 : '-'],
+          ['Trạng thái sau khi gửi', 'PENDING']
         ];
         rows.forEach(([k,v])=>{
           const kdiv = document.createElement('div'); kdiv.textContent = k;
@@ -296,11 +293,8 @@
       closePreview.addEventListener('click', closeModal);
       modal.addEventListener('click', (ev)=>{ if(ev.target===modal) closeModal(); });
 
-      // ---- Submit handling
       function canSubmit(){
-        if(!form.reportValidity){ // Safari fallback
-          if(!reason.value.trim() || !s.value || !e.value) return false;
-        }
+        if(!form.reportValidity){ if(!reason.value.trim() || !s.value || !e.value || !typeSel.value) return false; }
         if(reason.value.trim().length < 20) return false;
         if(parse(e.value) < parse(s.value)) return false;
         return true;
@@ -312,7 +306,7 @@
           return;
         }
         setLoading(submitBtn, true);
-        saveDraft(); // lưu 1 phát trước khi gửi
+        saveDraft();
       });
       confirmSubmit.addEventListener('click', ()=>{
         closeModal();
@@ -324,7 +318,6 @@
         }
       });
 
-      // ---- Keyboard shortcuts
       document.addEventListener('keydown', (eKey)=>{
         if((eKey.ctrlKey || eKey.metaKey) && eKey.key.toLowerCase()==='enter'){
           eKey.preventDefault();
@@ -333,18 +326,14 @@
         }
       });
 
-      // ---- Initial sync
       (function init(){
-        // Giới hạn min theo hôm nay
         const t = todayStr(); s.min = t; e.min = t;
-        // Nếu chỉ có start (vd server trả lại sau lỗi), set end = start
         if(s.value && !e.value){ e.value = s.value; }
         syncKPIs(); syncReason();
       })();
     })();
   </script>
+
+  <%@ include file="/WEB-INF/views/common/_footer.jsp" %>
 </body>
-
-<%@ include file="/WEB-INF/views/common/_footer.jsp" %>
-
 </html>

@@ -7,33 +7,46 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-@WebFilter(urlPatterns = {"/auth/*"})
+@WebFilter(filterName = "AuthFilter", urlPatterns = {"/auth/*"})
 public class AuthFilter implements Filter {
+  private String sessionAttr = "currentUser";
+  private String loginPage   = "/login.jsp"; // đổi nếu bạn dùng page khác
+
+  @Override public void init(FilterConfig cfg) {
+    if (cfg.getInitParameter("sessionAttr") != null)
+      sessionAttr = cfg.getInitParameter("sessionAttr");
+    if (cfg.getInitParameter("loginPage") != null)
+      loginPage = cfg.getInitParameter("loginPage");
+  }
 
   @Override
   public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
       throws IOException, ServletException {
-
     HttpServletRequest req  = (HttpServletRequest) request;
     HttpServletResponse resp = (HttpServletResponse) response;
 
-    HttpSession session = req.getSession(false);
-    Object currentUser = (session == null) ? null : session.getAttribute("currentUser"); // đổi tên attr nếu bạn dùng khác
+    HttpSession s = req.getSession(false);
+    boolean loggedIn = s != null && s.getAttribute(sessionAttr) != null;
 
-    if (currentUser == null) {
-      // Chưa đăng nhập → chuyển về trang login (kèm next để quay lại sau khi login)
-      String next = URLEncoder.encode(getFullURL(req), StandardCharsets.UTF_8);
-      resp.sendRedirect(req.getContextPath() + "/login?next=" + next);
+    if (!loggedIn) {
+      String next = req.getRequestURI() +
+                    (req.getQueryString() != null ? "?" + req.getQueryString() : "");
+      String toLogin = req.getContextPath() + loginPage +
+                       "?next=" + URLEncoder.encode(next, StandardCharsets.UTF_8);
+
+      String accept = req.getHeader("Accept");
+      boolean api = "XMLHttpRequest".equalsIgnoreCase(req.getHeader("X-Requested-With")) ||
+                    (accept != null && accept.contains("application/json"));
+
+      if (api) {
+        resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        resp.setContentType("application/json;charset=UTF-8");
+        resp.getWriter().write("{\"error\":\"unauthenticated\"}");
+      } else {
+        resp.sendRedirect(toLogin);
+      }
       return;
     }
-
     chain.doFilter(request, response);
-  }
-
-  private String getFullURL(HttpServletRequest req) {
-    String q = req.getQueryString();
-    String url = req.getRequestURI();
-    if (q != null && !q.isEmpty()) url += "?" + q;
-    return url.substring(req.getContextPath().length());
   }
 }

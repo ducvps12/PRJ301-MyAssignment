@@ -5,15 +5,13 @@ import com.acme.leavemgmt.model.Request;
 import com.acme.leavemgmt.model.User;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.*;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,62 +27,75 @@ public class ApprovalsServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
+        req.setCharacterEncoding("UTF-8");
+        resp.setCharacterEncoding("UTF-8");
+        resp.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+
         HttpSession s = req.getSession(false);
         User me = (s != null) ? (User) s.getAttribute("currentUser") : null;
 
         if (me == null) {
-            resp.sendRedirect(req.getContextPath() + "/login?next=/request/approvals");
+            // quay lại sau khi login
+            String back = req.getContextPath() + "/login?next=" + req.getContextPath() + "/request/approvals";
+            resp.sendRedirect(back);
             return;
         }
 
-        // Cho phép: ADMIN, SYS_ADMIN, DIV_LEADER, TEAM_LEAD, HR_ADMIN, MANAGER/LEADER
-        String role = "";
-        if (me.getRole() != null) role = me.getRole();
-        else if (me.getRoleCode() != null) role = me.getRoleCode();
-        role = role == null ? "" : role.trim().toUpperCase();
-
-        boolean allowed =
-                (has(me, "ADMIN") || has(me, "SYS_ADMIN") ||
-                 has(me, "DIV_LEADER") || has(me, "TEAM_LEAD") ||
-                 has(me, "HR_ADMIN") || has(me, "MANAGER") || has(me, "LEADER"));
-
-        if (!allowed) {
+        if (!isAllowed(me)) {
             resp.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
 
+        List<Request> items;
         try {
-            List<Request> items = requestDAO.findPendingForApprover(me);
+            items = requestDAO.findPendingForApprover(me);
             if (items == null) items = Collections.emptyList();
-
-            // Tương thích cả JSP cũ & mới
-            req.setAttribute("items", items);
-            req.setAttribute("pending", items);
-
-            req.getRequestDispatcher("/WEB-INF/views/request/approvals.jsp")
-               .forward(req, resp);
-
         } catch (SQLException ex) {
-            log.log(Level.SEVERE, "Load approvals failed", ex);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "DB error");
+            // Không văng 500 nữa – log và render trang với list rỗng
+            log.log(Level.SEVERE, "Load approvals failed (DB error)", ex);
+            items = Collections.emptyList();
+            req.setAttribute("dbError", "DB_ERROR");
+        } catch (Exception ex) {
+            // Bất kỳ lỗi runtime nào khác
+            log.log(Level.SEVERE, "Load approvals failed (unexpected)", ex);
+            items = Collections.emptyList();
+            req.setAttribute("dbError", "UNEXPECTED");
         }
+
+        // Tên attribute tương thích cả view cũ & mới
+        req.setAttribute("items", items);
+        req.setAttribute("pending", items);
+
+        // Nếu bạn đặt JSP ở chỗ khác, đổi path này cho khớp
+        req.getRequestDispatcher("/WEB-INF/views/request/approvals.jsp").forward(req, resp);
     }
 
-    /** Helper: ưu tiên isAdmin()/isLeader() nếu model có, fallback so sánh chuỗi role. */
-    private boolean has(User me, String need) {
-        String n = need == null ? "" : need.trim().toUpperCase();
-        if ("ADMIN".equals(n) && safeBool(() -> me.isAdmin())) return true;
-        if (("LEADER".equals(n) || "DIV_LEADER".equals(n) || "TEAM_LEAD".equals(n))
-                && safeBool(() -> me.isLeader())) return true;
+    /* ===== Helpers ===== */
 
-        String r = (me.getRole() != null ? me.getRole() :
-                   (me.getRoleCode() != null ? me.getRoleCode() : ""));
-        r = r == null ? "" : r.trim().toUpperCase();
-        return r.equals(n);
+    private boolean isAllowed(User me) {
+        // Ưu tiên boolean helper nếu Model đã có
+        try { if (me.isAdmin())  return true; } catch (Throwable ignored) {}
+        try { if (me.isLeader()) return true; } catch (Throwable ignored) {}
+
+        String role = normalize(roleOf(me));
+        // Cho phép: ADMIN, SYS_ADMIN, DIV_LEADER, TEAM_LEAD, HR_ADMIN, MANAGER, LEADER
+        return "ADMIN".equals(role)
+                || "SYS_ADMIN".equals(role)
+                || "DIV_LEADER".equals(role)
+                || "TEAM_LEAD".equals(role)
+                || "HR_ADMIN".equals(role)
+                || "MANAGER".equals(role)
+                || "LEADER".equals(role);
     }
 
-    private boolean safeBool(Check c) {
-        try { return c.get(); } catch (Throwable t) { return false; }
+    private String roleOf(User u) {
+        if (u == null) return "";
+        if (u.getRole() != null && !u.getRole().isEmpty()) return u.getRole();
+        if (u.getRoleCode() != null && !u.getRoleCode().isEmpty()) return u.getRoleCode();
+        return "";
     }
-    @FunctionalInterface private interface Check { boolean get(); }
+
+    private String normalize(String s) {
+        return s == null ? "" : s.trim().toUpperCase(Locale.ROOT);
+    }
 }

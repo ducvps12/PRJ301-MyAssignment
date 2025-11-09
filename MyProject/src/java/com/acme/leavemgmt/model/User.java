@@ -323,8 +323,19 @@ public class User implements Serializable {
 public Integer getManagerId() { return managerId; }
 public void setManagerId(int managerId) { this.managerId = managerId; }      // <-- FIX: không ném exception nữa
 public void setManagerId(Integer managerId) { this.managerId = managerId; }  // optional
-    
-    
-    
+// ===== trong class User =====
+private String passwordHash;   // khớp tên cột DB: password_hash (hoặc password)
+
+// Getter / Setter an toàn (không NPE)
+public String getPasswordHash() {
+    return passwordHash;
+}
+public void setPasswordHash(String passwordHash) {
+    this.passwordHash = (passwordHash == null ? "" : passwordHash.trim());
+}
+
+/* Nếu dự án cũ còn dùng getPassword()/setPassword(),
+   có thể ánh xạ tạm để không phải sửa nhiều chỗ: */
+
     
 }

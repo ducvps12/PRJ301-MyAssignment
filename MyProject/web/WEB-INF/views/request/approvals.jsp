@@ -1,8 +1,9 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ include file="/WEB-INF/views/common/_taglibs.jsp" %>
-<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
 
-<c:set var="ctx"  value="${pageContext.request.contextPath}" />
+<c:set var="ctx" value="${pageContext.request.contextPath}" />
+<c:set var="data" value="${not empty pending ? pending : items}" />
+<c:set var="csrfParam" value="${empty requestScope.csrfParam ? '_csrf' : requestScope.csrfParam}" />
 <c:set var="csrf" value="${empty csrf ? (empty requestScope.csrfToken ? '' : requestScope.csrfToken) : csrf}" />
 
 <style>
@@ -30,6 +31,7 @@
   .toast{position:fixed;right:20px;bottom:20px;display:flex;gap:10px;flex-direction:column}
   .t{background:#fff;border:1px solid var(--bd);padding:10px 12px;border-radius:8px}
   .muted{color:var(--muted)}
+  .alert{border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;border-radius:8px;padding:10px 12px;margin-bottom:12px}
 </style>
 
 <div class="wrap">
@@ -40,6 +42,10 @@
       <button id="excelBtn" class="btn primary small">Export Excel</button>
     </div>
   </div>
+
+  <c:if test="${not empty dbError}">
+    <div class="alert">Không tải được dữ liệu từ cơ sở dữ liệu (mã: ${dbError}). Vui lòng thử lại sau.</div>
+  </c:if>
 
   <div class="table-wrap">
     <table id="tbl" aria-label="Danh sách đơn chờ duyệt">
@@ -56,8 +62,10 @@
         </tr>
       </thead>
       <tbody id="pendingBody">
-        <c:forEach var="r" items="${items}" varStatus="vs">
-          <tr data-id="${r.id}" data-name="${fn:escapeXml(r.fullName)}" data-type="${fn:escapeXml(r.type)}" data-reason="${fn:escapeXml(r.reason)}" class="row-pending">
+        <c:forEach var="r" items="${data}" varStatus="vs">
+          <tr data-id="${r.id}" data-name="${fn:escapeXml(r.fullName)}"
+              data-type="${fn:escapeXml(r.type)}" data-reason="${fn:escapeXml(r.reason)}"
+              class="row-pending">
             <td><input type="checkbox" class="rowChk"></td>
             <td><strong>${vs.index + 1}</strong></td>
             <td><strong>${r.fullName}</strong></td>
@@ -78,7 +86,8 @@
                 <c:otherwise>—</c:otherwise>
               </c:choose>
             </td>
-            <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${fn:escapeXml(r.reason)}">${r.reason}</td>
+            <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                title="${fn:escapeXml(r.reason)}">${r.reason}</td>
             <td style="display:flex;gap:6px">
               <a class="btn small" href="${ctx}/request/detail?id=${r.id}">Xem</a>
               <button class="btn small ok act-single" data-action="approve" data-id="${r.id}" type="button">Duyệt</button>
@@ -87,7 +96,7 @@
           </tr>
         </c:forEach>
 
-        <c:if test="${empty items}">
+        <c:if test="${empty data}">
           <tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Không có đơn chờ duyệt</td></tr>
         </c:if>
       </tbody>
@@ -109,7 +118,7 @@
     <h3 id="mTitle" style="margin:0 0 8px">Xác nhận</h3>
     <p id="mDesc" class="muted">Bạn có chắc muốn thực hiện thao tác này?</p>
     <textarea id="mNote" name="note" placeholder="Ghi chú (không bắt buộc)" style="width:100%;min-height:110px;margin-top:8px"></textarea>
-    <input type="hidden" name="_csrf" value="${csrf}">
+    <input type="hidden" name="${csrfParam}" value="${csrf}">
     <input type="hidden" name="action" id="mAction" value="">
     <input type="hidden" name="id" id="mId" value="">
     <div id="mIds"></div>

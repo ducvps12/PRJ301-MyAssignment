@@ -6,58 +6,56 @@ import jakarta.servlet.http.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
 
-@WebFilter("/*")
+@WebFilter(filterName = "AllowedPathsFilter", urlPatterns = {"/*"})
 public class AllowedPathsFilter implements Filter {
-  private Set<String> allowed; // chứa path chính xác hoặc tiền tố thư mục (kết thúc bằng '/')
+  private final Set<String> exact = new HashSet<>();
+  private final List<String> prefix = new ArrayList<>();
+  private String allowFile = "/allowed_access.txt"; // nằm ở web root
 
-  @Override
-  public void init(FilterConfig filterConfig) throws ServletException {
-    ServletContext ctx = filterConfig.getServletContext();
-    // Đọc từ WEB-INF để không bị lộ public
-    try (InputStream is = ctx.getResourceAsStream("/WEB-INF/allowed_access.txt")) {
-      if (is == null) throw new FileNotFoundException("WEB-INF/allowed_access.txt not found");
-      try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-        allowed = br.lines()
-            .map(String::trim)
-            .filter(s -> !s.isEmpty() && !s.startsWith("#"))
-            .collect(Collectors.toCollection(LinkedHashSet::new));
+  @Override public void init(FilterConfig cfg) throws ServletException {
+    if (cfg.getInitParameter("allowFile") != null)
+      allowFile = cfg.getInitParameter("allowFile");
+
+    ServletContext ctx = cfg.getServletContext();
+    try (InputStream in = ctx.getResourceAsStream(allowFile)) {
+      if (in == null) throw new ServletException("Not found: " + allowFile);
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = br.readLine()) != null) {
+          line = line.trim();
+          if (line.isEmpty() || line.startsWith("#")) continue;
+          if (line.endsWith("/*")) {
+            prefix.add(line.substring(0, line.length() - 1)); // giữ dấu '/'
+          } else {
+            exact.add(line);
+          }
+        }
       }
     } catch (IOException e) {
-      throw new ServletException("Cannot load allowed_access.txt", e);
+      throw new ServletException(e);
     }
+  }
+
+  private boolean allowed(String path) {
+    if (exact.contains(path)) return true;
+    for (String p : prefix) if (path.startsWith(p)) return true;
+    return false;
   }
 
   @Override
   public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
       throws IOException, ServletException {
-
-    HttpServletRequest req  = (HttpServletRequest) request;
+    HttpServletRequest req = (HttpServletRequest) request;
     HttpServletResponse resp = (HttpServletResponse) response;
 
-    String ctxPath = req.getContextPath();
-    String path = req.getRequestURI().substring(ctxPath.length()); // path bắt đầu bằng '/'
+    String path = req.getRequestURI().substring(req.getContextPath().length());
+    if (path.isEmpty()) path = "/";
 
-    // Mặc định servlet container đã chặn /WEB-INF và /META-INF, ta vẫn cho qua nếu là tài nguyên của chính app.
-    // Kiểm tra whitelist: khớp chính xác hoặc là nằm trong một folder được whitelist (dòng kết thúc '/')
-    if (isAllowed(path)) {
+    if (allowed(path)) {
       chain.doFilter(request, response);
     } else {
-      resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden by AllowedPathsFilter");
+      resp.sendError(HttpServletResponse.SC_FORBIDDEN); // 403
     }
-  }
-
-  private boolean isAllowed(String path) {
-    if (allowed == null) return false;
-    for (String rule : allowed) {
-      if (rule.endsWith("/")) {
-        // whitelist cả thư mục/prefix
-        if (path.startsWith(rule)) return true;
-      } else {
-        if (path.equals(rule)) return true;
-      }
-    }
-    return false;
   }
 }

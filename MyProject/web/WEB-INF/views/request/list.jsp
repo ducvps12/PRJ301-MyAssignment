@@ -208,7 +208,9 @@
                 <a class="btn-icon danger" href="#" data-cancel data-id="${r.id}" title="Hủy">Hủy</a>
               </c:if>
 
-              <a class="btn-icon" href="${pageContext.request.contextPath}/request/duplicate?id=${r.id}" title="Nhân bản">Nhân bản</a>
+<a class="btn" href="${pageContext.request.contextPath}/request/duplicate?id=${r.id}">
+  Nhân bản
+</a>
             </td>
           </tr>
         </c:forEach>
