@@ -4,6 +4,7 @@
 <div class="layout">
   <!-- SIDEBAR + HEADER -->
   <jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
+  <jsp:include page="/WEB-INF/views/audit/_audit_header.jsp" />
 
   <!-- NỘI DUNG CHÍNH – đẩy theo chiều rộng sidebar bằng var(--sbw) -->
   <main class="with-sb" id="content">
@@ -26,7 +27,7 @@
       </div>
       <c:remove var="flash_error" scope="session" />
     </c:if>
-
+    <br><br><br>
     <div class="container users-page">
       <!-- Page Header / Toolbar -->
       <div class="page-head">

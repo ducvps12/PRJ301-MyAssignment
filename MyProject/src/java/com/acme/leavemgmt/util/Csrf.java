@@ -3,70 +3,147 @@ package com.acme.leavemgmt.util;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
+import java.io.PrintWriter;
 import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
  * CSRF helper – session token + form/header verification.
  *
- * - Lưu token trong session (attr: "csrf").
- * - Client gửi lại qua input name "_csrf" hoặc header "X-CSRF-Token"
- *   (cũng chấp nhận "csrf_token" / "csrf" và header "X-CSRF").
- * - GET/HEAD/OPTIONS -> bỏ qua (always valid).
+ * Cách dùng:
+ *  - Ở doGet:  Csrf.protect(req);  // đẩy token xuống request để view render
+ *    JSP: <c:set var="csrfParam" value="${requestScope.csrfParam}" />
+ *         <c:set var="csrfToken" value="${requestScope.csrfToken}" />
+ *         <input type="hidden" name="${csrfParam}" value="${csrfToken}"/>
+ *
+ *  - Ở doPost: if (!Csrf.isTokenValid(req)) { resp.sendError(400, "CSRF invalid"); return; }
+ *
+ * Lưu ý:
+ *  - Với form multipart, bạn cần parser (Apache FileUpload/Servlet 3.0 parts)
+ *    để req.getParameter(...) thấy được field token.
  */
 public final class Csrf {
 
-    // Tên attr / param / header chuẩn
-    public static final String ATTR        = "csrf";
-    public static final String PARAM       = "_csrf";          // tên input mặc định
-    public static final String ALT_PARAM   = "csrf_token";     // tên input phổ biến
-    public static final String ALT_PARAM_2 = "csrf";           // tên input legacy
-    public static final String HEADER      = "X-CSRF-Token";
-    public static final String ALT_HEADER  = "X-CSRF";
+    /* ====== Tên attr / param / header ====== */
+    public static final String SESSION_ATTR = "csrf";          // token lưu trong session
+    public static final String PARAM        = "_csrf";         // tên input mặc định
+    public static final String ALT_PARAM    = "csrf_token";    // alias phổ biến
+    public static final String ALT_PARAM_2  = "csrf";          // alias legacy
+    public static final String HEADER       = "X-CSRF-Token";
+    public static final String ALT_HEADER   = "X-CSRF";
+
+    // Thuận tiện cho view (request attributes)
+    public static final String REQ_ATTR_PARAM       = "csrfParam";    // => PARAM
+    public static final String REQ_ATTR_VALUE       = "csrfToken";    // => token string
+    public static final String REQ_ATTR_OBJ         = "csrfTokenObj"; // => Token object
+    public static final String REQ_ATTR_BACKCOMP_1  = "_csrf";        // back-compat
+    public static final String REQ_ATTR_BACKCOMP_2  = "csrf_token";
+    public static final String REQ_ATTR_BACKCOMP_3  = "csrf";
 
     private static final SecureRandom RNG = new SecureRandom();
 
-    /* ---------- Aliases & helpers public API ---------- */
+    /** Alias ngắn gọn để kiểm tra token; tương đương {@link #valid(HttpServletRequest)}. */
+    public static boolean validate(HttpServletRequest req) {
+        return valid(req);
+    }
+
+    /** Struct mang xuống view (param + value). */
+    public static final class Token {
+        private final String param;
+        private final String value;
+        public Token(String param, String value) { this.param = param; this.value = value; }
+        public String getParam() { return param; }
+        public String getValue() { return value; }
+    }
+
+    /* ================== Public API ================== */
+
+    /** Đảm bảo có token trong session và expose ra request để view render. */
+    public static void protect(HttpServletRequest req) { addToken(req); }
 
     /** Alias: kiểm tra hợp lệ token cho request hiện tại (true/false). */
     public static boolean isTokenValid(HttpServletRequest req) { return valid(req); }
 
-    /** Đảm bảo có token trong session và đẩy xuống request để JSP render. */
+    /** Alias: như trên. */
+    public static boolean verify(HttpServletRequest req) { return valid(req); }
+
+    /** Alias cũ. */
+    public static boolean verifyToken(HttpServletRequest req) { return valid(req); }
+
+    /** Thực sự đẩy token ra request (và tạo nếu chưa có trong session). */
     public static void addToken(HttpServletRequest req) {
-        String t = ensureToken(req.getSession());
-        // expose theo nhiều key để các form cũ/mới đều dùng được
-        req.setAttribute("csrf_token", t);
-        req.setAttribute("_csrf", t);
-        req.setAttribute(ATTR, t);
+        // BẮT BUỘC tạo/duy trì session khi render form
+        HttpSession s = req.getSession(true);
+        String t = ensureToken(s);
+
+        // Đưa xuống view – vừa chuẩn vừa back-compat
+        req.setAttribute(REQ_ATTR_PARAM, PARAM);
+        req.setAttribute(REQ_ATTR_VALUE, t);
+        req.setAttribute(REQ_ATTR_OBJ, new Token(PARAM, t));
+
+        // Back-compat aliases cho các view cũ
+        req.setAttribute(REQ_ATTR_BACKCOMP_1, t);
+        req.setAttribute(REQ_ATTR_BACKCOMP_2, t);
+        req.setAttribute(REQ_ATTR_BACKCOMP_3, t);
     }
 
     /** Lấy/khởi tạo token hiện tại gắn với session của request. */
-    static String token(HttpServletRequest req) { return ensureToken(req.getSession()); }
+    static String token(HttpServletRequest req) { return ensureToken(req.getSession(true)); }
 
-    /** Gọi ở doGet để chắc chắn view luôn có token render. */
-    public static void protect(HttpServletRequest req) { addToken(req); }
+    /** Soát vé CSRF (ném SecurityException nếu sai) cho các phương thức không an toàn. */
+    public static void verify(HttpServletRequest req, String token) {
+        if (isSafeMethod(req.getMethod())) return;
 
-    /** Trả về true/false khi kiểm tra token từ param/header. */
-    public static boolean verify(HttpServletRequest req) { return valid(req); }
+        HttpSession session = req.getSession(false);
+        String expected = getToken(session);
+        if (isEmpty(expected)) throw new SecurityException("Missing CSRF session token");
 
-    /** Alias cũ, tương đương verify(req). */
-    public static boolean verifyToken(HttpServletRequest req) { return valid(req); }
+        String provided = !isEmpty(token) ? token : firstNonEmpty(
+                req.getParameter(PARAM),
+                req.getParameter(ALT_PARAM),
+                req.getParameter(ALT_PARAM_2),
+                req.getHeader(HEADER),
+                req.getHeader(ALT_HEADER)
+        );
+        if (isEmpty(provided) || !constantTimeEquals(expected, provided)) {
+            throw new SecurityException("Invalid CSRF token");
+        }
+    }
 
-    /* ========= Core logic ========= */
+    /** (Tiện ích) Ghi luôn thẻ input ẩn vào output stream. */
+    public static void writeHiddenInput(HttpServletRequest req, PrintWriter out) {
+        String t = token(req);
+        out.print("<input type=\"hidden\" name=\"" + PARAM + "\" value=\"" + escapeHtml(t) + "\"/>");
+    }
 
-    /** Tạo token mới (32 bytes -> ~43 ký tự Base64 URL-safe, không padding). */
-    private static String newToken() {
-        byte[] b = new byte[32];
-        RNG.nextBytes(b);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    /* ================== Core logic ================== */
+
+    /** true = hợp lệ; GET/HEAD/OPTIONS luôn hợp lệ. */
+    public static boolean valid(HttpServletRequest req) {
+        String m = req.getMethod();
+        if (isSafeMethod(m)) return true;
+
+        HttpSession session = req.getSession(false);
+        String expected = getToken(session);
+        if (isEmpty(expected)) return false;
+
+        String provided = firstNonEmpty(
+                req.getParameter(PARAM),
+                req.getParameter(ALT_PARAM),
+                req.getParameter(ALT_PARAM_2),
+                req.getHeader(HEADER),
+                req.getHeader(ALT_HEADER)
+        );
+        return !isEmpty(provided) && constantTimeEquals(expected, provided);
     }
 
     /** Đảm bảo session có token, trả về token hiện tại. */
     public static String ensureToken(HttpSession s) {
-        Object t = (s != null) ? s.getAttribute(ATTR) : null;
-        if (!(t instanceof String)) {
+        if (s == null) return newToken(); // không set được – caller nên gọi getSession(true)
+        Object t = s.getAttribute(SESSION_ATTR);
+        if (!(t instanceof String) || isEmpty((String) t)) {
             String nt = newToken();
-            if (s != null) s.setAttribute(ATTR, nt);
+            s.setAttribute(SESSION_ATTR, nt);
             return nt;
         }
         return (String) t;
@@ -74,75 +151,21 @@ public final class Csrf {
 
     /** Lấy token hiện có (có thể null). */
     public static String getToken(HttpSession s) {
-        return (s == null) ? null : (String) s.getAttribute(ATTR);
+        return (s == null) ? null : (String) s.getAttribute(SESSION_ATTR);
     }
 
     /** Xoay token mới (gọi sau login/logout/đổi quyền). */
     public static void rotate(HttpSession s) {
-        if (s != null) s.setAttribute(ATTR, newToken());
+        if (s != null) s.setAttribute(SESSION_ATTR, newToken());
     }
 
-    /**
-     * Kiểm tra CSRF cho request.
-     * - Với GET/HEAD/OPTIONS: luôn true.
-     * - Với method khác: so sánh token session với form param hoặc header.
-     */
-    public static boolean valid(HttpServletRequest req) {
-        String m = req.getMethod();
-        if (isSafeMethod(m)) return true;
+    /* ================== Helpers ================== */
 
-        HttpSession session = req.getSession(false);
-        String expected = getToken(session);
-        if (expected == null || expected.isEmpty()) return false;
-
-        String provided = firstNonEmpty(
-                req.getParameter(PARAM),          // _csrf
-                req.getParameter(ALT_PARAM),      // csrf_token
-                req.getParameter(ALT_PARAM_2),    // csrf (legacy)
-                req.getHeader(HEADER),            // X-CSRF-Token
-                req.getHeader(ALT_HEADER)         // X-CSRF
-        );
-        if (provided == null) return false;
-
-        return constantTimeEquals(expected, provided);
+    private static String newToken() {
+        byte[] b = new byte[32];  // 256-bit
+        RNG.nextBytes(b);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
     }
-
-    /* ===== Implement các method còn thiếu (compat) ===== */
-
-    /** Compat: alias cho valid(req). */
-    public static boolean validate(HttpServletRequest req) {
-        return valid(req);
-    }
-
-    /**
-     * Kiểm tra với token truyền vào sẵn:
-     * - Nếu method safe -> return (không ném).
-     * - Nếu token null/rỗng -> fallback đọc từ param/header.
-     * - Nếu sai -> ném SecurityException (để servlet/bộ lọc bắt và trả 403).
-     */
-    public static void verify(HttpServletRequest req, String token) {
-        if (isSafeMethod(req.getMethod())) return; // không yêu cầu CSRF cho GET/HEAD/OPTIONS
-
-        HttpSession session = req.getSession(false);
-        String expected = getToken(session);
-        if (expected == null || expected.isEmpty()) {
-            throw new SecurityException("Missing CSRF session token");
-        }
-
-        String provided = (token != null && !token.isEmpty()) ? token : firstNonEmpty(
-                req.getParameter(PARAM),
-                req.getParameter(ALT_PARAM),
-                req.getParameter(ALT_PARAM_2),
-                req.getHeader(HEADER),
-                req.getHeader(ALT_HEADER)
-        );
-
-        if (provided == null || !constantTimeEquals(expected, provided)) {
-            throw new SecurityException("Invalid CSRF token");
-        }
-    }
-
-    /* ===== internal helpers ===== */
 
     private static boolean isSafeMethod(String m) {
         return "GET".equalsIgnoreCase(m)
@@ -152,11 +175,13 @@ public final class Csrf {
 
     private static String firstNonEmpty(String... arr) {
         if (arr == null) return null;
-        for (String s : arr) if (s != null && !s.isEmpty()) return s;
+        for (String s : arr) if (!isEmpty(s)) return s;
         return null;
     }
 
-    /** So sánh hằng thời gian để hạn chế timing attacks. */
+    private static boolean isEmpty(String s) { return s == null || s.isEmpty(); }
+
+    /** So sánh hằng-thời-gian để hạn chế timing attacks. */
     private static boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) return false;
         int len = Math.max(a.length(), b.length());
@@ -167,6 +192,23 @@ public final class Csrf {
             diff |= (ca ^ cb);
         }
         return diff == 0;
+    }
+
+    /** Rất tối thiểu – đủ cho hidden input. */
+    private static String escapeHtml(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&': sb.append("&amp;"); break;
+                case '<': sb.append("&lt;");  break;
+                case '>': sb.append("&gt;");  break;
+                case '"': sb.append("&quot;");break;
+                case '\'':sb.append("&#x27;");break;
+                default:  sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private Csrf() {}

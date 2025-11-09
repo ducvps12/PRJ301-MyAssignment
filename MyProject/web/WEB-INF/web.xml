@@ -458,6 +458,38 @@
   <url-pattern>/activity</url-pattern>
 </servlet-mapping>
 
+<!-- ====================== ADMIN: NOTIFICATIONS ====================== -->
+<servlet>
+    <servlet-name>AdminNotificationServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminNotificationServlet</servlet-class>
+    <!-- Tùy chọn: khởi tạo sớm -->
+    <load-on-startup>1</load-on-startup>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>AdminNotificationServlet</servlet-name>
+    <url-pattern>/admin/notifications</url-pattern>
+</servlet-mapping>
+
+
+<!-- ====================== ADMIN: SUPPORT (LIST + DETAIL) ====================== -->
+<servlet>
+    <servlet-name>AdminSupportServlet</servlet-name>
+    <servlet-class>com.acme.leavemgmt.servlet.admin.AdminSupportServlet</servlet-class>
+    <load-on-startup>1</load-on-startup>
+</servlet>
+
+<!-- Danh sách ticket -->
+<servlet-mapping>
+    <servlet-name>AdminSupportServlet</servlet-name>
+    <url-pattern>/admin/support</url-pattern>
+</servlet-mapping>
+
+<!-- Chi tiết ticket -->
+<servlet-mapping>
+    <servlet-name>AdminSupportServlet</servlet-name>
+    <url-pattern>/admin/support/detail</url-pattern>
+</servlet-mapping>
 
 
 

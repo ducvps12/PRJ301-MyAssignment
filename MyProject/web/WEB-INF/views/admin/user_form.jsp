@@ -1,8 +1,8 @@
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@include file="/WEB-INF/views/common/_taglibs.jsp"%>
 
-<jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
-
+<%@ include file="/WEB-INF/views/audit/_audit_header.jsp" %>
+  
 <c:set var="ctx" value="${pageContext.request.contextPath}" />
 
 <!-- Defaults -->
@@ -24,8 +24,10 @@
   </c:otherwise>
 </c:choose>
 
+
 <div class="main-body user-form-page">
   <div class="container-xl">
+<br><br>
 
     <!-- Header / Title -->
     <div class="uf-head">

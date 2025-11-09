@@ -97,6 +97,7 @@
 </head>
 <body>
 
+  <jsp:include page="/WEB-INF/views/audit/_audit_sidebar.jsp" />
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="topbar-inner">
