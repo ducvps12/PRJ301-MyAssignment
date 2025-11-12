@@ -73,7 +73,6 @@
               <input id="password" name="password" class="input" type="password"
                      autocomplete="current-password" required aria-required="true"
                      aria-describedby="formHelp" />
-              <button type="button" class="pw-toggle" id="btnTogglePw" aria-label="Ẩn/hiện mật khẩu">👁️</button>
             </div>
           </div>
 

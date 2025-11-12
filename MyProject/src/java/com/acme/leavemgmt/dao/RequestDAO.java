@@ -1706,37 +1706,42 @@ public boolean updateStatusIfPending(int id, String newStatus, int actorId, Stri
 public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
     if (me == null || reqObj == null) return false;
 
-    final String role = (me.getRole() == null ? "" : me.getRole().toUpperCase());
+    final String role = me.getRole() == null ? "" : me.getRole().trim().toUpperCase();
     final int requestId = reqObj.getId();
 
-    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role) || "HR_ADMIN".equals(role)) {
-        return true;
-    }
-
-    final String BASE_JOIN = """
-        FROM dbo.Requests r
-        JOIN dbo.Users    u ON u.user_id = r.user_id  -- PK/FK chuẩn
-       WHERE r.id = ?
-    """;
+    if ("ADMIN".equals(role) || "SYS_ADMIN".equals(role) || "HR_ADMIN".equals(role)) return true;
 
     try (Connection cn = getConnection()) {
+        ensureMappings(cn);
+
+        // Base join: Users (requester) <-> Requests (owner of request)
+        final String BASE_JOIN = """
+            FROM dbo.Requests r
+            JOIN dbo.Users    u ON u.%s = r.%s
+           WHERE r.id = ?
+        """.formatted(USERS_PK, REQ_REQUESTER_COL);
+
         switch (role) {
             case "TEAM_LEAD": {
-                // là quản lý trực tiếp của requester
-                final String sql = "SELECT 1 " + BASE_JOIN + " AND u.manager_id = ?";
+                // Approve nếu me là manager trực tiếp của requester
+                final String sql = "SELECT 1 " + BASE_JOIN + " AND u." + USERS_MANAGER_COL + " = ?";
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
                     ps.setInt(1, requestId);
-                    ps.setInt(2, me.getUserId());
-                    try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+                    ps.setInt(2, me.getUserId()); // hoặc me.getId() tùy User model
+                    try (ResultSet rs = ps.executeQuery()) {
+                        return rs.next();
+                    }
                 }
             }
             case "DIV_LEADER": {
-                // cùng department
-                final String sql = "SELECT 1 " + BASE_JOIN + " AND u.department = ?";
+                // Approve nếu cùng phòng/ban
+                final String sql = "SELECT 1 " + BASE_JOIN + " AND u." + USERS_DEPTID_COL + " = ?";
                 try (PreparedStatement ps = cn.prepareStatement(sql)) {
                     ps.setInt(1, requestId);
-                    ps.setString(2, me.getDepartment()); // ví dụ: 'IT','HR','SALE'
-                    try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+                    ps.setInt(2, me.getDepartmentId());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        return rs.next();
+                    }
                 }
             }
             default:
@@ -1744,6 +1749,46 @@ public boolean isAllowedToApprove(User me, Request reqObj) throws SQLException {
         }
     }
 }
+
+// ==== Column detector (cache) ====
+private static volatile String USERS_PK = null;        // user_id | id
+private static volatile String REQ_REQUESTER_COL = null; // employee_id | created_by | user_id
+private static volatile String USERS_MANAGER_COL = "manager_id"; // nếu schema khác có thể detect tương tự
+private static volatile String USERS_DEPTID_COL  = "department_id"; // detect tương tự nếu cần
+
+private static String detectColumn(Connection cn, String schema, String table, String... candidates) throws SQLException {
+    final String sql = """
+        SELECT c.name
+          FROM sys.columns c
+         WHERE c.object_id = OBJECT_ID(?)
+           AND c.name IN (%s)
+    """.formatted(String.join(",", java.util.Collections.nCopies(candidates.length, "?")));
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, schema + "." + table);
+        for (int i = 0; i < candidates.length; i++) ps.setString(i + 2, candidates[i]);
+        try (ResultSet rs = ps.executeQuery()) {
+            java.util.Set<String> exists = new java.util.HashSet<>();
+            while (rs.next()) exists.add(rs.getString(1));
+            for (String cand : candidates) if (exists.contains(cand)) return cand;
+        }
+    }
+    throw new SQLException("None of the candidate columns exist on " + schema + "." + table + " → " + java.util.Arrays.toString(candidates));
+}
+
+private static void ensureMappings(Connection cn) throws SQLException {
+    if (USERS_PK == null || REQ_REQUESTER_COL == null) {
+        synchronized (RequestDAO.class) {
+            if (USERS_PK == null)
+                USERS_PK = detectColumn(cn, "dbo", "Users", "user_id", "id");
+            if (REQ_REQUESTER_COL == null)
+                REQ_REQUESTER_COL = detectColumn(cn, "dbo", "Requests", "employee_id", "created_by", "user_id");
+            // Nếu cần, cũng detect manager/dept id tương tự:
+            // USERS_MANAGER_COL = detectColumn(cn, "dbo", "Users", "manager_id", "leader_id");
+            // USERS_DEPTID_COL  = detectColumn(cn, "dbo", "Users", "department_id", "dept_id");
+        }
+    }
+}
+
 
 
 public int countHeadcountActiveByDept(String dept) throws SQLException {

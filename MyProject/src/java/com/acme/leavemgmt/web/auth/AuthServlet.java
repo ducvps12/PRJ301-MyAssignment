@@ -2,31 +2,35 @@ package com.acme.leavemgmt.web.auth;
 
 import com.acme.leavemgmt.dao.UserDAO;
 import com.acme.leavemgmt.model.User;
+import com.acme.leavemgmt.util.DBConnection;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.UUID;
 
-// Nếu đã cấu hình trong web.xml thì giữ nguyên; nếu chưa có thì mở dòng dưới:
-// @WebServlet(urlPatterns = {"/login"})
+@WebServlet(urlPatterns = {"/login"})
 public class AuthServlet extends HttpServlet {
 
     private static final String VIEW_LOGIN = "/WEB-INF/views/auth/login.jsp";
-    private final UserDAO userDAO = new UserDAO();
 
+    // ====== GET: hiển thị form, xử lý logout ======
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
         HttpSession s = req.getSession(false);
 
-        // Logout: /login?logout=1
+        // /login?logout=1
         if ("1".equals(req.getParameter("logout"))) {
             if (s != null) s.invalidate();
             resp.sendRedirect(req.getContextPath() + "/login");
@@ -37,25 +41,20 @@ public class AuthServlet extends HttpServlet {
         if (s != null && s.getAttribute("currentUser") != null) {
             User cu = (User) s.getAttribute("currentUser");
             String fallback = req.getContextPath()
-                    + (isOffboardingRole(cu != null ? cu.getRole() : null)
-                       ? "/user/home"
-                       : "/portal");
+                    + (isOffboardingRole(cu != null ? cu.getRole() : null) ? "/user/home" : "/portal");
             resp.sendRedirect(fallback);
             return;
         }
 
-        // CSRF token cho form
         ensureCsrfToken(req.getSession(true));
 
-        // Giữ lại tham số next nếu có
         String next = req.getParameter("next");
-        if (next != null && !next.isBlank()) {
-            req.setAttribute("next", next);
-        }
+        if (next != null && !next.isBlank()) req.setAttribute("next", next);
 
         req.getRequestDispatcher(VIEW_LOGIN).forward(req, resp);
     }
 
+    // ====== POST: xử lý đăng nhập ======
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -63,14 +62,13 @@ public class AuthServlet extends HttpServlet {
         req.setCharacterEncoding("UTF-8");
         resp.setCharacterEncoding("UTF-8");
 
-        // 1) CSRF
+        // CSRF
         if (!validateCsrf(req)) {
             req.setAttribute("error", "Phiên không hợp lệ. Vui lòng thử lại.");
             req.getRequestDispatcher(VIEW_LOGIN).forward(req, resp);
             return;
         }
 
-        // 2) Lấy input
         String username = trim(req.getParameter("username"));
         String password = trim(req.getParameter("password"));
         String next     = trim(req.getParameter("next"));
@@ -83,25 +81,22 @@ public class AuthServlet extends HttpServlet {
             return;
         }
 
-        try {
-            // 3) Xác thực (TODO: chuyển sang BCrypt/Argon2)
-            User u = userDAO.findByUsernameAndPassword(username, password);
+        // Mở DAO theo request (ưu tiên JNDI, fallback DBConnection)
+        try (UserDAO dao = openUserDao()) {
+            User u = dao.findByUsernameAndPassword(username, password);
 
             if (isLoginAllowed(u)) {
-                // 4) Chống session fixation
                 HttpSession old = req.getSession(false);
                 if (old != null) old.invalidate();
                 HttpSession s = req.getSession(true);
                 try { req.changeSessionId(); } catch (Throwable ignore) {}
 
-                // 5) Lưu user vào session (đúng key mà RoleFilter dùng)
                 s.setAttribute("currentUser", u);
                 s.setAttribute("userId", u.getId());
                 s.setAttribute("fullName", u.getFullName());
                 s.setAttribute("role", u.getRole());
                 s.setAttribute("department", u.getDepartment());
 
-                // 6) Điều hướng an toàn theo role (tôn trọng 'next' nếu hợp lệ)
                 String fallback = req.getContextPath()
                         + (isOffboardingRole(u.getRole()) ? "/user/home" : "/portal");
                 String target = safeNext(req, next, fallback);
@@ -109,7 +104,6 @@ public class AuthServlet extends HttpServlet {
                 return;
             }
 
-            // Sai TK/MK hoặc không được phép đăng nhập
             req.setAttribute("error", "Sai tài khoản hoặc mật khẩu.");
             req.setAttribute("username", username);
             req.setAttribute("next", next);
@@ -120,11 +114,25 @@ public class AuthServlet extends HttpServlet {
         }
     }
 
-    // ===== Helpers =====
-
-    private static String trim(String s) {
-        return (s == null) ? "" : s.trim();
+    // ====== Helpers ======
+    /** Mở UserDAO theo request: ưu tiên DataSource JNDI, nếu không có thì dùng DBConnection. */
+    private UserDAO openUserDao() throws SQLException {
+        DataSource ds = jndiDataSourceOrNull("java:comp/env/jdbc/LeaveMgmtDS");
+        if (ds != null) return new UserDAO(ds); // DAO tự mở & sẽ tự close() nhờ try-with-resources
+        Connection cn = DBConnection.getConnection();
+        return new UserDAO(cn); // vẫn tự close() ở try-with-resources (UserDAO implements AutoCloseable)
     }
+
+    private DataSource jndiDataSourceOrNull(String jndiName) {
+        try {
+            InitialContext ctx = new InitialContext();
+            return (DataSource) ctx.lookup(jndiName);
+        } catch (NamingException ignore) {
+            return null;
+        }
+    }
+
+    private static String trim(String s) { return (s == null) ? "" : s.trim(); }
 
     private void ensureCsrfToken(HttpSession session) {
         if (session.getAttribute("_csrf") == null) {
@@ -143,15 +151,12 @@ public class AuthServlet extends HttpServlet {
     /** Cho phép đăng nhập khi user tồn tại, active và không thuộc nhóm bị khóa hẳn. */
     private boolean isLoginAllowed(User u) {
         if (u == null) return false;
-        // isActive() của bạn có thể đã cover status; ta vẫn chặn thêm các role "khóa hẳn"
         if (!u.isActive()) return false;
         String role = u.getRole();
-        // SUSPENDED & TERMINATED: không cho login
-        if ("SUSPENDED".equals(role) || "TERMINATED".equals(role)) return false;
-        return true;
+        return !("SUSPENDED".equals(role) || "TERMINATED".equals(role));
     }
 
-    /** Nhóm role “hạn chế” → rơi về /user/home thay vì /portal */
+    /** Nhóm role “hạn chế” → rơi về /user/home thay vì /portal. */
     private boolean isOffboardingRole(String role) {
         if (role == null) return false;
         switch (role) {
@@ -164,7 +169,7 @@ public class AuthServlet extends HttpServlet {
         }
     }
 
-    /** Chỉ cho phép redirect về URL nội bộ; với fallback tùy role. */
+    /** Chỉ cho phép redirect nội bộ; có fallback. */
     private String safeNext(HttpServletRequest req, String next, String fallback) {
         String fb = (fallback == null || fallback.isBlank())
                 ? (req.getContextPath() + "/portal")
@@ -172,25 +177,19 @@ public class AuthServlet extends HttpServlet {
 
         if (next == null || next.isBlank()) return fb;
 
-        // Không cho absolute URL (tránh open redirect)
         try {
             URI u = new URI(next);
-            if (u.isAbsolute()) return fb;
+            if (u.isAbsolute()) return fb; // chặn open redirect
         } catch (URISyntaxException e) {
             return fb;
         }
 
-        // Chỉ chấp nhận đường dẫn nội bộ
         if (next.startsWith(req.getContextPath()) || next.startsWith("/")) {
-            return next.startsWith("/")
-                    ? (req.getContextPath() + next)
-                    : (req.getContextPath() + "/" + next);
+            return next.startsWith("/") ? (req.getContextPath() + next)
+                                        : (req.getContextPath() + "/" + next);
         }
         return fb;
     }
 
-    /** Bản giữ tương thích nếu nơi khác còn gọi. */
-    private String safeNext(HttpServletRequest req, String next) {
-        return safeNext(req, next, req.getContextPath() + "/portal");
-    }
+    // Không cần init()/destroy() vì DAO được mở/đóng theo từng request.
 }

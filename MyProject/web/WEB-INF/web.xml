@@ -33,6 +33,26 @@
     <servlet-name>Hello</servlet-name>
     <url-pattern>/__health</url-pattern>
   </servlet-mapping>
+  
+  
+  
+  
+  <servlet>
+  <servlet-name>GoogleOAuthServlet</servlet-name>
+  <servlet-class>com.acme.leavemgmt.servlet.auth.GoogleOAuthServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+  <servlet-name>GoogleOAuthServlet</servlet-name>
+  <url-pattern>/oauth/google/start</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+  <servlet-name>GoogleOAuthServlet</servlet-name>
+  <url-pattern>/oauth/google/callback</url-pattern>
+</servlet-mapping>
+
+  
+  
+  
 <!-- Portal Home -->
 <servlet>
   <servlet-name>PortalHome</servlet-name>

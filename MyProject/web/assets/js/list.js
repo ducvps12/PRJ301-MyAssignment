@@ -3,6 +3,15 @@
    bulk select, CSV export, theme/density toggle, phím tắt, toast, loading, …
 */
 
+// ❶ Đặt chung ở đầu file (khu UTILITIES)
+const localYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`; // KHÔNG dùng toISOString
+};
+
+
 (function () {
   const qs = (s, el=document) => el.querySelector(s);
   const qsa = (s, el=document) => Array.from(el.querySelectorAll(s));

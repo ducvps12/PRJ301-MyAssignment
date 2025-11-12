@@ -33,7 +33,6 @@
   <!-- Thanh công cụ -->
   <div class="toolbar">
     <a class="btn btn-primary" href="${pageContext.request.contextPath}/request/create">+ Tạo đơn</a>
-    <a class="btn" href="${pageContext.request.contextPath}/request/agenda">📅 Agenda</a>
     <button class="btn" id="btnExportCsv" type="button" title="Xuất CSV theo bộ lọc">⇩ Xuất CSV</button>
     <a class="btn btn-ghost" href="${pageContext.request.contextPath}/request/list" id="btnRefresh" title="Làm mới (R)">⟲ Làm mới</a>
 

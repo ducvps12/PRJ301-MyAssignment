@@ -128,6 +128,15 @@
         <a href="${cp}/recruit/job" data-nav="recruit" title="Tuyển dụng">
           <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg><span>Tuyển dụng</span>
         </a>
+
+   <a href="${cp}/request/approvals" data-nav="recruit" title="Duyệt đơn">
+          <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg><span>Duyệt đơn</span>
+        </a>
+
+
+        <a href="${cp}/request/agenda" data-nav="recruit" title="Agenda">
+          <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2"/></svg><span>Agenda</span>
+        </a>
       </c:if>
       <c:if test="${isAdmin}">
         <a href="${cp}/admin" data-nav="admin" title="Admin">
@@ -136,13 +145,7 @@
       </c:if>
     </nav>
 
-    <div class="search">
-      <label for="qGlobal" class="visually-hidden">Tìm kiếm</label>
-      <div class="search-wrap">
-        <span class="kbd">⌕</span>
-        <input id="qGlobal" class="inp" type="search" placeholder="Tìm nhanh (ấn /)" autocomplete="off">
-      </div>
-    </div>
+   
 
     <div class="spacer"></div>
 
@@ -155,10 +158,59 @@
       </a>
 
       <div class="dd" id="ddNoti">
-        <button class="ibtn bell" aria-label="Thông báo" aria-haspopup="menu" aria-expanded="false" title="Thông báo">
-          <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 8a6 6 0 0 1 12 0v5l2 2H4l2-2V8"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
-          <c:if test="${noti > 0}"><span class="dot"><c:out value="${noti}"/></span></c:if>
-        </button>
+  <button class="ibtn bell" aria-label="Thông báo" aria-haspopup="menu" aria-expanded="false" title="Thông báo">
+    <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M6 8a6 6 0 0 1 12 0v5l2 2H4l2-2V8"/>
+      <path d="M10 19a2 2 0 0 0 4 0"/>
+    </svg>
+    <c:if test="${requestScope.newsUnread gt 0}">
+      <span class="dot"><c:out value="${requestScope.newsUnread}"/></span>
+    </c:if>
+  </button>
+
+  <div class="dd-menu" role="menu" aria-label="Thông báo">
+    <div style="padding:6px 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <div><b>Thông báo</b>
+        <span class="chip"><c:out value="${requestScope.newsUnread}"/></span>
+      </div>
+      <form id="markAllNews" method="post" action="${cp}/notif/read-all">
+        <button type="submit" class="ibtn" style="padding:6px 8px">Đã đọc hết</button>
+      </form>
+    </div>
+
+    <c:forEach var="n" items="${requestScope.news}">
+      <a class="item" data-id="${n.id}" role="menuitem"
+         href="${empty n.linkUrl ? '#' : n.linkUrl}"
+         style="display:flex;gap:10px;padding:10px;border-radius:10px;text-decoration:none;color:inherit;border:1px solid var(--bd);margin:6px 0">
+        <div class="thumb" style="width:56px;height:40px;border-radius:6px;overflow:hidden;background:#e2e8f0;flex-shrink:0">
+          <img loading="lazy"
+               src="https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=480&h=300&fit=crop"
+               alt="">
+        </div>
+        <div class="meta" style="flex:1">
+          <div class="t" style="font-weight:700">
+            <c:out value="${n.title}"/>
+            <c:if test="${!n.read}"><span style="color:#16a34a"> • Mới</span></c:if>
+          </div>
+          <c:if test="${not empty n.body}">
+            <div class="d" style="color:var(--muted);font-size:12px"><c:out value="${n.body}"/></div>
+          </c:if>
+          <div class="d" style="color:var(--muted);font-size:12px">
+            <fmt:formatDate value="${n.createdAt}" pattern="dd/MM/yyyy HH:mm"/>
+          </div>
+        </div>
+      </a>
+    </c:forEach>
+
+    <c:if test="${empty requestScope.news}">
+      <div style="padding:12px;color:var(--muted)">Không có thông báo.</div>
+    </c:if>
+  </div>
+</div>
+
+
+
+        
         <div class="dd-menu" role="menu" aria-label="Thông báo">
           <div style="padding:6px 8px 10px"><b>Thông báo</b> <span class="chip">${noti}</span></div>
           <a role="menuitem" href="${cp}/request/list?mine=1">Đơn của tôi</a>
@@ -166,12 +218,7 @@
         </div>
       </div>
 
-      <button class="ibtn" id="btnTheme" title="Đổi theme (Alt+T)">
-        <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-      </button>
-      <button class="ibtn" id="btnDensity" title="Đổi mật độ">
-        <svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M7 12h10M5 18h14"/></svg>
-      </button>
+   
 
       <div class="dd" id="ddUser">
         <button class="ibtn dd-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="menuUser">

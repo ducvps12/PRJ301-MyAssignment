@@ -14,111 +14,196 @@ import javax.sql.DataSource;
  * UserDAO – làm việc với bảng Users (SQL Server).
  * Chỉnh T_USERS nếu schema khác dbo.
  */
-public class UserDAO {
 
-    private static final String T_USERS = "[dbo].[Users]";
 
-    private final DataSource ds; // có thể null -> fallback DBConnection
+/** DAO cho bảng Users. */
+public class UserDAO implements AutoCloseable {
+    // ====== Constants ======
+private static final String T_USERS = "[dbo].[Users]";
 
-    // ==========================
-    // Constructors
-    // ==========================
-    public UserDAO(DataSource ds) { this.ds = ds; }
-    public UserDAO() { this(null); }
+// ====== Fields ======
+private final Connection cn;     // kết nối để query
+private final DataSource ds;     // có thể null
+private final boolean ownsConn;  // true nếu tự mở cn từ ds và sẽ tự đóng
 
-    // ==========================
-    // Authentication / Login
-    // ==========================
+// ====== Constructors ======
 
-    /**
-     * Đăng nhập:
-     *  - Lấy user theo username & status=1
-     *  - Nếu password dạng PBKDF2 -> verify
-     *  - Nếu legacy (plain) -> so sánh trực tiếp; đúng thì migrate sang PBKDF2
-     */
-    public User findByUsernameAndPassword(String username, String passwordPlain) throws SQLException {
-        final String sql = """
-            SELECT u.id, u.username, u.[password], u.full_name, u.role, u.department, u.status,
-                   u.email, u.phone, u.address, u.birthday, u.bio, u.avatar_url,
-                   u.created_at, u.updated_at,
-                   u.department_id, u.role_id, u.division_id, u.manager_id
-            FROM """ + T_USERS + """
-            u WHERE u.username=? AND u.status=1
-        """;
+/** (1) Dùng Connection sẵn có */
+public UserDAO(Connection cn) {
+    this.cn = cn;
+    this.ds = null;
+    this.ownsConn = false;
+}
 
-        try (Connection con = getConn();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+/** (2) Dùng DataSource: tự lấy connection và sẽ tự close() khi close() DAO */
+public UserDAO(DataSource ds) throws SQLException {
+    this.ds = ds;
+    this.cn = ds.getConnection();
+    this.ownsConn = true;
+}
 
-            ps.setString(1, username);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return null;
+/** (3) Có cả ds và cn sẵn -> không tự đóng */
+public UserDAO(DataSource ds, Connection cn) {
+    this.ds = ds;
+    this.cn = cn;
+    this.ownsConn = false;
+}
 
-                String stored = rs.getString("password");
-                boolean ok;
-
-                if (stored != null && stored.startsWith("PBKDF2$")) {
-                    ok = Passwords.verify(passwordPlain, stored);
-                } else {
-                    ok = passwordPlain != null && passwordPlain.equals(stored);
-                    if (ok) {
-                        String newHash = Passwords.hash(passwordPlain);
-                        try (PreparedStatement up = con.prepareStatement(
-                                "UPDATE " + T_USERS + " SET [password]=?, updated_at=SYSDATETIME() WHERE id=?")) {
-                            up.setString(1, newHash);
-                            up.setInt(2, rs.getInt("id"));
-                            up.executeUpdate();
-                        }
-                    }
-                }
-
-                if (!ok) return null;
-                return mapRow(rs);
-            }
-        }
+// ====== Close ======
+@Override
+public void close() {
+    if (ownsConn) {
+        try { if (cn != null && !cn.isClosed()) cn.close(); } catch (SQLException ignore) {}
     }
+}
+// ====== Mapping helper ======
 
-    // ==========================
-    // Forgot password / helpers
-    // ==========================
-// tìm user theo email (nếu chưa có)
-public User findByEmail(String email) throws Exception {
-    final String sql = """
-        SELECT user_id, username, full_name, email, password_hash
-        FROM [dbo].[Users]
-        WHERE email = ?
-    """;
-    try (var con = DBConnection.getConnection();
-         var ps  = con.prepareStatement(sql)) {
+
+// ====== Business methods ======
+
+/** Tìm user đang hoạt động theo email. */
+public User findActiveByEmail(String email) throws SQLException {
+    final String sql =
+        "SELECT TOP 1 id, username, full_name, role, department, status, email, avatar_url " +
+        "FROM " + T_USERS + " WHERE email = ? " +
+        "AND (status = 1 OR UPPER(CAST(status AS NVARCHAR(16))) IN ('TRUE','ACTIVE','ON'))";
+
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
         ps.setString(1, email);
-        try (var rs = ps.executeQuery()) {
-            if (rs.next()) {
-                User u = new User();
-                u.setUserId(rs.getInt("user_id"));
-                u.setUsername(rs.getString("username"));
-                u.setFullName(rs.getString("full_name"));
-                u.setEmail(rs.getString("email"));
-                u.setPasswordHash(rs.getString("password_hash"));
-                return u;
-            }
-            return null;
+        try (ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? mapRow(rs) : null;
         }
     }
 }
 
-// cập nhật mật khẩu theo email (hàm IDE đang báo thiếu)
-public boolean updatePasswordByEmail(String email, String passwordHash) throws Exception {
+/** Ghi nhận lần đăng nhập Google + cập nhật avatar/name nếu có. */
+public void updateGoogleLogin(int userId, String avatarUrl, String fullName) throws SQLException {
+    final String sql =
+        "UPDATE " + T_USERS + " " +
+        "SET last_login = GETDATE(), " +
+        "    updated_at = GETDATE(), " +
+        "    avatar_url = COALESCE(?, avatar_url), " +
+        "    full_name  = COALESCE(?, full_name) " +
+        "WHERE id = ?";
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, avatarUrl);
+        ps.setString(2, fullName);
+        ps.setInt(3, userId);
+        ps.executeUpdate();
+    }
+}
+
+/** Đăng nhập: username + password (tự nâng cấp sang PBKDF2 nếu đang lưu plain). */
+public User findByUsernameAndPassword(String username, String passwordPlain) throws SQLException {
+    final String sql =
+        "SELECT u.id, u.username, u.[password], u.full_name, u.role, u.department, u.status, " +
+        "       u.email, u.avatar_url, u.created_at, u.updated_at " +
+        "FROM " + T_USERS + " u WHERE u.username = ? " +
+        "AND (u.status = 1 OR UPPER(CAST(u.status AS NVARCHAR(16))) IN ('TRUE','ACTIVE','ON'))";
+
+    try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, username);
+
+        try (ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) return null;
+
+            String stored = rs.getString("password");
+            boolean ok;
+
+            if (stored != null && stored.startsWith("PBKDF2$")) {
+                ok = Passwords.verify(passwordPlain, stored);
+            } else {
+                ok = passwordPlain != null && passwordPlain.equals(stored);
+                if (ok) {
+                    // nâng cấp sang PBKDF2
+                    String newHash = Passwords.hash(passwordPlain);
+                    try (PreparedStatement up = cn.prepareStatement(
+                            "UPDATE " + T_USERS + " SET [password]=?, updated_at=SYSDATETIME() WHERE id=?")) {
+                        up.setString(1, newHash);
+                        up.setInt(2, rs.getInt("id"));
+                        up.executeUpdate();
+                    }
+                }
+            }
+
+            if (!ok) return null;
+            return mapRow(rs);
+        }
+    }
+}
+// import java.sql.ResultSet; import java.sql.SQLException;
+
+private User mapUser(ResultSet rs) throws SQLException {
+    User u = new User();
+
+    u.setUserId(rs.getInt("uid"));
+    u.setUsername(rs.getString("username"));
+    u.setFullName(rs.getString("full_name"));
+
+    // role: lấy alias role_code (nếu có) rồi fallback role
+    String role = rs.getString("role_code");
+    if (role == null) role = rs.getString("role");
+    u.setRole(role);                 // << bỏ setRoleCode, vì model không có
+
+    // department: alias dept_name rồi fallback department (tùy model có setter nào)
+    String dept = rs.getString("dept_name");
+    if (dept == null) dept = rs.getString("department");
+    try { u.setDepartment(dept); } catch (Throwable ignore) { /* model có thể không có setter này */ }
+
+    u.setEmail(rs.getString("email"));
+    try { u.setStatus(rs.getInt("status")); } catch (Throwable ignore) {}
+
+    return u;
+}
+
+
+public User findByEmail(String email) throws SQLException {
+    if (email == null) return null;
+
     final String sql = """
-        UPDATE [dbo].[Users]
-           SET password_hash = ?
-         WHERE email = ?
+        SELECT TOP 1
+               u.user_id                       AS uid,
+               u.username,
+               u.full_name,
+               ISNULL(u.role, 'STAFF')         AS role_code,
+               ISNULL(u.department, '')        AS dept_name,
+               u.email,
+               ISNULL(u.status, 1)             AS status
+          FROM dbo.Users u
+         WHERE LOWER(LTRIM(RTRIM(u.email))) = LOWER(?)
+           AND (u.status = 1 OR u.status IS NULL)
     """;
-    try (var con = DBConnection.getConnection();
-         var ps  = con.prepareStatement(sql)) {
+
+    try (Connection cn = getConnection();
+         PreparedStatement ps = cn.prepareStatement(sql)) {
+        ps.setString(1, email.trim());
+        try (ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? mapUser(rs) : null;
+        }
+    }
+}
+
+public boolean updatePasswordByEmail(String email, String passwordHash) throws SQLException {
+    final String sql = """
+        UPDATE dbo.Users
+           SET password = ?
+         WHERE LOWER(LTRIM(RTRIM(email))) = LOWER(?)
+           AND (status = 1 OR status IS NULL)
+    """;
+    try (Connection cn = getConnection();
+         PreparedStatement ps = cn.prepareStatement(sql)) {
         ps.setString(1, passwordHash);
-        ps.setString(2, email);
+        ps.setString(2, email.trim());
         return ps.executeUpdate() > 0;
     }
 }
+
+// ========== MAPROW ==========
+// ánh xạ 1 dòng từ ResultSet -> User
+
+
+
+
 
 
 public void updatePassword(int userId, String newHashedPassword) throws SQLException {
@@ -495,48 +580,80 @@ private static void safeSetStrReflect(Object bean, ResultSet rs, String col, Str
         }
     }
 
-    // ==========================
-    // Mapping & low-level helpers
-    // ==========================
-
-    private User mapRow(ResultSet rs) throws SQLException {
-        User u = new User();
-        u.setId(rs.getInt("id"));
-        u.setUsername(rs.getString("username"));
-        u.setFullName(rs.getString("full_name"));
-        u.setRole(rs.getString("role"));
-        u.setDepartment(rs.getString("department"));
-        safeGetInt(rs, "status", u::setStatus);
-
-        u.setEmail(rs.getString("email"));
-        u.setPhone(rs.getString("phone"));
-        u.setAddress(rs.getString("address"));
-
-        Date bd = rs.getDate("birthday");
-        if (bd != null) u.setBirthday(((java.sql.Date) bd).toLocalDate());
-
-        u.setBio(rs.getString("bio"));
-        u.setAvatarUrl(rs.getString("avatar_url"));
-
-        Timestamp ct = rs.getTimestamp("created_at");
-        if (ct != null) u.setCreatedAt(new java.util.Date(ct.getTime()));
-
-        safeGetInt(rs, "department_id", u::setDepartmentId);
-        safeGetInt(rs, "role_id",       u::setRoleId);
-        safeGetInt(rs, "division_id",   u::setDivisionId);
-        safeGetInt(rs, "manager_id",    u::setManagerId);
-
-        return u;
+   // ==========================
+// Mapping & low-level helpers
+// ==========================
+private static boolean hasCol(ResultSet rs, String col) {
+    try { rs.findColumn(col); return true; } catch (SQLException e) { return false; }
+}
+private static String getStr(ResultSet rs, String... names) throws SQLException {
+    for (String n : names) if (n != null && hasCol(rs, n)) return rs.getString(n);
+    return null;
+}
+private static Integer getInt(ResultSet rs, String... names) throws SQLException {
+    for (String n : names) if (n != null && hasCol(rs, n)) {
+        int v = rs.getInt(n);
+        return rs.wasNull() ? null : v;
     }
+    return null;
+}
+private static LocalDate getDate(ResultSet rs, String... names) throws SQLException {
+    for (String n : names) if (n != null && hasCol(rs, n)) {
+        java.sql.Date d = rs.getDate(n);
+        return (d == null ? null : d.toLocalDate());
+    }
+    return null;
+}
 
-    private static void setNullable(PreparedStatement ps, int idx, String v) throws SQLException {
-        if (v == null || v.isBlank()) ps.setNull(idx, Types.NVARCHAR);
-        else ps.setString(idx, v);
-    }
-    private static void setNullable(PreparedStatement ps, int idx, LocalDate v) throws SQLException {
-        if (v == null) ps.setNull(idx, Types.DATE);
-        else ps.setDate(idx, java.sql.Date.valueOf(v));
-    }
+private User mapRow(ResultSet rs) throws SQLException {
+    User u = new User();
+
+    // Hỗ trợ cả "id" và "uid"
+    Integer id = getInt(rs, "id", "uid", "user_id");
+    if (id != null) u.setId(id);
+
+    u.setUsername(getStr(rs, "username", "user_name", "login"));
+    // Chỉ đọc password nếu SELECT có cột này (đăng nhập / đổi mật khẩu)
+    String pwd = getStr(rs, "password", "pwd_hash", "passhash");
+    if (pwd != null) u.setPassword(pwd);
+
+    u.setFullName(getStr(rs, "full_name", "fullname", "name"));
+
+    // Hỗ trợ role/role_code
+    String role = getStr(rs, "role", "role_code");
+    if (role != null) u.setRole(role);
+
+    // Hỗ trợ department / dept_name
+    String dept = getStr(rs, "department", "dept_name");
+    if (dept != null) u.setDepartment(dept);
+
+    u.setStatus(getStr(rs, "status"));
+    u.setEmail(getStr(rs, "email"));
+
+    u.setPhone(getStr(rs, "phone", "mobile"));
+    u.setAvatarUrl(getStr(rs, "avatar_url", "avatar"));
+    u.setAddress(getStr(rs, "address"));
+    LocalDate bd = getDate(rs, "birthday", "dob");
+    if (bd != null) u.setBirthday(bd);
+    u.setBio(getStr(rs, "bio"));
+
+    Integer depId = getInt(rs, "department_id", "dept_id");
+    if (depId != null) u.setDepartmentId(depId);
+    Integer roleId = getInt(rs, "role_id");
+    if (roleId != null) u.setRoleId(roleId);
+
+    return u;
+}
+
+// Giữ lại helpers setNullable như cũ
+private static void setNullable(PreparedStatement ps, int idx, String v) throws SQLException {
+    if (v == null || v.isBlank()) ps.setNull(idx, Types.NVARCHAR);
+    else ps.setString(idx, v);
+}
+private static void setNullable(PreparedStatement ps, int idx, LocalDate v) throws SQLException {
+    if (v == null) ps.setNull(idx, Types.DATE);
+    else ps.setDate(idx, java.sql.Date.valueOf(v));
+}
 
     /** Cho tham số Long nhưng map về SQL INT (FK). */
     private static void setNullableInt(PreparedStatement ps, int idx, Long v) throws SQLException {

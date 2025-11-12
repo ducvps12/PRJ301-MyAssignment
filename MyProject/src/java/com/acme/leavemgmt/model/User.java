@@ -337,5 +337,7 @@ public void setPasswordHash(String passwordHash) {
 /* Nếu dự án cũ còn dùng getPassword()/setPassword(),
    có thể ánh xạ tạm để không phải sửa nhiều chỗ: */
 
+  
+
     
 }

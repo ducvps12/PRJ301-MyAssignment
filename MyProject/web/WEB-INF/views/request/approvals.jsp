@@ -1,14 +1,18 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ include file="/WEB-INF/views/common/_taglibs.jsp" %>
+<jsp:include page="/WEB-INF/views/layout/_header.jsp" />
+<jsp:include page="/WEB-INF/views/layout/_sidebar.jsp" />
+
 
 <c:set var="ctx" value="${pageContext.request.contextPath}" />
 <c:set var="data" value="${not empty pending ? pending : items}" />
 <c:set var="csrfParam" value="${empty requestScope.csrfParam ? '_csrf' : requestScope.csrfParam}" />
 <c:set var="csrf" value="${empty csrf ? (empty requestScope.csrfToken ? '' : requestScope.csrfToken) : csrf}" />
+<c:set var="pageTitle" value="Phê duyệt đơn nghỉ"/>
 
 <style>
   :root{ --card:#fff; --bd:#e5e7eb; --ink:#0f172a; --muted:#64748b; --table:#f6f7fb; }
-  .wrap{max-width:1400px;margin:0 auto;padding:20px}
+  .wrap{max-width:1400px;margin:0 auto;}
   .toolbar{display:flex;justify-content:space-between;align-items:center;background:var(--card);
     border:1px solid var(--bd);border-radius:8px;padding:14px 16px;margin-bottom:16px}
   .toolbar h1{margin:0;font-size:20px;font-weight:700}
@@ -18,6 +22,7 @@
   .btn.ok{background:#10b981;border-color:#10b981;color:#fff}
   .btn.danger{background:#ef4444;border-color:#ef4444;color:#fff}
   .btn.primary{background:#111827;border-color:#111827;color:#fff}
+  .btn[disabled]{opacity:.7;cursor:not-allowed}
   .chip{border:1px dashed var(--bd);border-radius:8px;padding:4px 8px;font-size:12px}
   .table-wrap{background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
   table{width:100%;border-collapse:collapse;min-width:900px}
@@ -26,22 +31,26 @@
   tbody tr:hover{background:#f7f8fb}
   .bar-bottom{display:flex;justify-content:space-between;align-items:center;background:var(--table);border:1px solid var(--bd);border-top:none;border-radius:0 0 8px 8px;padding:12px}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
-  .modal.show{display:flex}
+  .modal.show{display:flex !important}
   .dialog{max-width:560px;width:100%;background:#fff;border:1px solid var(--bd);border-radius:8px;padding:20px}
-  .toast{position:fixed;right:20px;bottom:20px;display:flex;gap:10px;flex-direction:column}
+  .toast{position:fixed;right:20px;bottom:20px;display:flex;gap:10px;flex-direction:column;z-index:60}
   .t{background:#fff;border:1px solid var(--bd);padding:10px 12px;border-radius:8px}
   .muted{color:var(--muted)}
-  .alert{border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;border-radius:8px;padding:10px 12px;margin-bottom:12px}
+  .alert{border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;border-radius:8px;padding:10px 12px;margin:12px 0}
 </style>
 
 <div class="wrap">
-  <div class="toolbar">
+  <div class="toolbar" role="region" aria-label="Thanh công cụ phê duyệt">
     <h1>Phê duyệt đơn nghỉ</h1>
     <div>
-      <button id="csvBtn" class="btn">Export CSV</button>
-      <button id="excelBtn" class="btn primary small">Export Excel</button>
+      <button id="csvBtn" class="btn" type="button">Export CSV</button>
+      <button id="excelBtn" class="btn primary small" type="button">Export Excel</button>
     </div>
   </div>
+
+  <c:if test="${not empty flash}">
+    <div class="t">${flash}</div>
+  </c:if>
 
   <c:if test="${not empty dbError}">
     <div class="alert">Không tải được dữ liệu từ cơ sở dữ liệu (mã: ${dbError}). Vui lòng thử lại sau.</div>
@@ -51,7 +60,7 @@
     <table id="tbl" aria-label="Danh sách đơn chờ duyệt">
       <thead>
         <tr>
-          <th style="width:40px"><input type="checkbox" id="chkAll"></th>
+          <th style="width:40px"><input type="checkbox" id="chkAll" aria-label="Chọn tất cả"></th>
           <th>#</th>
           <th>Nhân sự</th>
           <th>Loại</th>
@@ -66,7 +75,7 @@
           <tr data-id="${r.id}" data-name="${fn:escapeXml(r.fullName)}"
               data-type="${fn:escapeXml(r.type)}" data-reason="${fn:escapeXml(r.reason)}"
               class="row-pending">
-            <td><input type="checkbox" class="rowChk"></td>
+            <td><input type="checkbox" class="rowChk" name="ids" value="${r.id}" aria-label="Chọn đơn #${r.id}"></td>
             <td><strong>${vs.index + 1}</strong></td>
             <td><strong>${r.fullName}</strong></td>
             <td><span class="chip">${r.type}</span></td>
@@ -74,28 +83,25 @@
               <c:choose>
                 <c:when test="${not empty r.from}">
                   <fmt:formatDate value="${r.from}" pattern="dd/MM/yyyy"/>
-                </c:when>
-                <c:otherwise>—</c:otherwise>
+                </c:when><c:otherwise>—</c:otherwise>
               </c:choose>
             </td>
             <td>
               <c:choose>
                 <c:when test="${not empty r.to}">
                   <fmt:formatDate value="${r.to}" pattern="dd/MM/yyyy"/>
-                </c:when>
-                <c:otherwise>—</c:otherwise>
+                </c:when><c:otherwise>—</c:otherwise>
               </c:choose>
             </td>
             <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                 title="${fn:escapeXml(r.reason)}">${r.reason}</td>
             <td style="display:flex;gap:6px">
               <a class="btn small" href="${ctx}/request/detail?id=${r.id}">Xem</a>
-              <button class="btn small ok act-single" data-action="approve" data-id="${r.id}" type="button">Duyệt</button>
-              <button class="btn small danger act-single" data-action="reject" data-id="${r.id}" type="button">Từ chối</button>
+              <button class="btn small ok act-single" data-action="APPROVE" data-id="${r.id}" type="button">Duyệt</button>
+              <button class="btn small danger act-single" data-action="REJECT"  data-id="${r.id}" type="button">Từ chối</button>
             </td>
           </tr>
         </c:forEach>
-
         <c:if test="${empty data}">
           <tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Không có đơn chờ duyệt</td></tr>
         </c:if>
@@ -112,12 +118,12 @@
   </div>
 </div>
 
-<!-- Modal xác nhận -->
-<div id="modal" class="modal" role="dialog" aria-modal="true">
-  <form id="mForm" class="dialog" method="post" action="${ctx}/request/approve">
+<!-- Modal -->
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" aria-describedby="mDesc">
+  <form id="mForm" class="dialog" method="post" action="${ctx}/request/approvals">
     <h3 id="mTitle" style="margin:0 0 8px">Xác nhận</h3>
     <p id="mDesc" class="muted">Bạn có chắc muốn thực hiện thao tác này?</p>
-    <textarea id="mNote" name="note" placeholder="Ghi chú (không bắt buộc)" style="width:100%;min-height:110px;margin-top:8px"></textarea>
+    <textarea id="mNote" name="note" placeholder="Ghi chú (không bắt buộc)" style="width:100%;min-height:110px;margin-top:8px" maxlength="500"></textarea>
     <input type="hidden" name="${csrfParam}" value="${csrf}">
     <input type="hidden" name="action" id="mAction" value="">
     <input type="hidden" name="id" id="mId" value="">
@@ -141,8 +147,8 @@
   }
 
   const chkAll=$('#chkAll'), selCount=$('#selCount');
-  function updateSel(){const n=$$('.rowChk:checked').length; selCount.textContent=n;}
-  chkAll?.addEventListener('change',()=>{$$('.rowChk').forEach(c=>c.checked=chkAll.checked);updateSel();});
+  function updateSel(){ selCount.textContent = $$('.rowChk:checked').length; }
+  chkAll?.addEventListener('change',()=>{ $$('.rowChk').forEach(c=>c.checked=chkAll.checked); updateSel(); });
   $$('.rowChk').forEach(c=>c.addEventListener('change',()=>{ if(!c.checked) chkAll.checked=false; updateSel(); }));
 
   const modal=$('#modal'), mForm=$('#mForm'), mAction=$('#mAction'), mId=$('#mId'), mIds=$('#mIds'),
@@ -151,44 +157,24 @@
   function openModal(action, ids){
     if(!ids || !ids.length){ toast('Chưa chọn đơn'); return; }
     mAction.value=action; mIds.innerHTML=''; mId.value='';
-    if(ids.length===1){
-      mTitle.textContent=(action==='approve'?'Duyệt':'Từ chối')+' đơn #'+ids[0];
-      mId.value=ids[0];
-    }else{
-      mTitle.textContent=(action==='approve'?'Duyệt':'Từ chối')+' '+ids.length+' đơn';
-      ids.forEach(id=>{
-        const i=document.createElement('input');
-        i.type='hidden'; i.name='ids'; i.value=id;
-        mIds.appendChild(i);
-      });
+    if(ids.length===1){ mTitle.textContent=(action==='APPROVE'?'Duyệt':'Từ chối')+' đơn #'+ids[0]; mId.value=ids[0]; }
+    else{ mTitle.textContent=(action==='APPROVE'?'Duyệt':'Từ chối')+' '+ids.length+' đơn';
+      ids.forEach(id=>{ const i=document.createElement('input'); i.type='hidden'; i.name='ids'; i.value=id; mIds.appendChild(i); });
     }
-    mDesc.textContent='Bạn có thể thêm ghi chú trước khi xác nhận.';
-    mNote.value=''; modal.classList.add('show'); mNote.focus();
+    mDesc.textContent='Bạn có thể thêm ghi chú trước khi xác nhận.'; mNote.value='';
+    modal.classList.add('show'); mNote.focus();
   }
   function closeModal(){ modal.classList.remove('show'); }
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('show')) closeModal(); });
   $('#mCancel')?.addEventListener('click', closeModal);
   modal?.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
   $$('.act-single').forEach(b=>b.addEventListener('click',()=>openModal(b.dataset.action,[b.dataset.id])));
+  const getSelectedIds=()=>$$('.rowChk:checked').map(c=>c.value).filter(Boolean);
+  $('#bulkApproveBtn')?.addEventListener('click',()=>openModal('APPROVE',getSelectedIds()));
+  $('#bulkRejectBtn')?.addEventListener('click',()=>openModal('REJECT',getSelectedIds()));
 
-  const getSelectedIds=()=>$$('.rowChk:checked').map(c=>c.closest('tr').dataset.id).filter(Boolean);
-  $('#bulkApproveBtn')?.addEventListener('click',()=>openModal('approve',getSelectedIds()));
-  $('#bulkRejectBtn')?.addEventListener('click',()=>openModal('reject',getSelectedIds()));
-
-  mForm?.addEventListener('submit',e=>{
-    e.preventDefault();
-    const fd=new FormData(mForm);
-    fetch(mForm.action,{method:'POST',body:fd})
-      .then(r=>r.json().catch(()=>({success:r.ok})))
-      .then(d=>{
-        if(d.success){ toast('Thành công'); setTimeout(()=>location.reload(),700); }
-        else{ toast('Có lỗi, thử lại'); }
-      })
-      .catch(err=>toast('Lỗi kết nối: '+err.message))
-      .finally(closeModal);
-  });
-
-  // Export CSV/Excel
+  // Export CSV
   function rowsVisible(){ return $$('#pendingBody > tr.row-pending'); }
   $('#csvBtn')?.addEventListener('click',()=>{
     const rows=rowsVisible(); if(!rows.length) return toast('Không có dữ liệu');
@@ -208,6 +194,7 @@
     toast('Đã xuất CSV');
   });
 
+  // Export Excel (HTML table)
   $('#excelBtn')?.addEventListener('click',()=>{
     const rows=rowsVisible(); if(!rows.length) return toast('Không có dữ liệu');
     let html='<table><thead><tr><th>ID</th><th>Nhân sự</th><th>Loại</th><th>Từ</th><th>Đến</th><th>Lý do</th></tr></thead><tbody>';
@@ -225,3 +212,5 @@
   });
 })();
 </script>
+
+<jsp:include page="/WEB-INF/views/layout/_footer.jsp" />

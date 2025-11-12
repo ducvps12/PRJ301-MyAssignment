@@ -4,6 +4,8 @@ import com.acme.leavemgmt.dao.UserDAO;
 import com.acme.leavemgmt.model.User;
 import com.acme.leavemgmt.util.Csrf;
 import com.acme.leavemgmt.util.WebUtil;
+import com.acme.leavemgmt.util.DBConnection;
+
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -14,28 +16,31 @@ import java.util.regex.Pattern;
 
 @WebServlet(urlPatterns = {"/account/change-password"})
 public class ChangePasswordServlet extends HttpServlet {
-    private final UserDAO userDAO = new UserDAO();
 
-    // chính sách độ mạnh cơ bản: >=8 ký tự, có chữ & số (có thể nới/siết tuỳ bạn)
+    // chính sách độ mạnh cơ bản: >=8 ký tự, có chữ & số
     private static final Pattern BASIC_POLICY =
             Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,}$");
 
     // chống spam đổi liên tục: tối đa 1 lần / 10 giây
     private static final long COOLDOWN_MS = TimeUnit.SECONDS.toMillis(10);
 
-    @Override protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
         User me = (User) req.getSession().getAttribute("currentUser");
         if (me == null) {
             resp.sendRedirect(req.getContextPath() + "/login?next=" + req.getRequestURI());
             return;
         }
-        Csrf.addToken(req);
+        // đồng bộ với util Csrf (trước bạn dùng Csrf.protect)
+        Csrf.protect(req);
         req.getRequestDispatcher("/WEB-INF/views/account/change_password.jsp").forward(req, resp);
     }
 
-    @Override protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
+
         req.setCharacterEncoding("UTF-8");
         HttpSession session = req.getSession(false);
         User me = (session == null) ? null : (User) session.getAttribute("currentUser");
@@ -43,7 +48,12 @@ public class ChangePasswordServlet extends HttpServlet {
             resp.sendRedirect(req.getContextPath() + "/login?next=" + req.getRequestURI());
             return;
         }
-        if (!Csrf.verify(req)) { resp.sendError(403, "Bad CSRF token"); return; }
+
+        // CSRF (đồng bộ với util Csrf đang dùng ở servlet khác)
+        if (!Csrf.isTokenValid(req)) {
+            resp.sendError(403, "Bad CSRF token");
+            return;
+        }
 
         // cooldown chống spam
         Long last = (Long) session.getAttribute("cp_last");
@@ -83,12 +93,13 @@ public class ChangePasswordServlet extends HttpServlet {
             return;
         }
 
-        try {
+        try (UserDAO userDAO = new UserDAO(DBConnection.getConnection())) {
             boolean ok = userDAO.updatePasswordIfMatches(me.getId(), current, pass1);
+
             // log activity nhẹ (nếu bạn có ActivityDAO thì gọi ở đây)
             String ip = WebUtil.clientIp(req);
             String ua = WebUtil.userAgent(req);
-            // activityDAO.log(me.getId(), "CHANGE_PASSWORD", "USER", me.getId(), ok?"OK":"FAIL", ip, ua);
+            // activityDAO.log(me.getId(), "CHANGE_PASSWORD", "USER", me.getId(), ok ? "OK" : "FAIL", ip, ua);
 
             if (!ok) {
                 reRender(req, resp, "Mật khẩu hiện tại không đúng.");
@@ -114,17 +125,18 @@ public class ChangePasswordServlet extends HttpServlet {
     private void reRender(HttpServletRequest req, HttpServletResponse resp, String err)
             throws ServletException, IOException {
         req.setAttribute("err", err);
-        Csrf.addToken(req);
+        // đồng bộ kiểu CSRF với các trang khác
+        Csrf.protect(req);
         req.getRequestDispatcher("/WEB-INF/views/account/change_password.jsp").forward(req, resp);
     }
 
     private static boolean wantsJson(HttpServletRequest r) {
         String acc = r.getHeader("Accept");
         String xhr = r.getHeader("X-Requested-With");
-        return "XMLHttpRequest".equalsIgnoreCase(xhr) ||
-               (acc != null && acc.toLowerCase().contains("application/json"));
+        return "XMLHttpRequest".equalsIgnoreCase(xhr)
+                || (acc != null && acc.toLowerCase().contains("application/json"));
     }
 
-    private static boolean isBlank(String s){ return s == null || s.trim().isEmpty(); }
-    private static String trim(String s){ return s == null ? null : s.trim(); }
+    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static String trim(String s) { return s == null ? "" : s.trim(); }
 }

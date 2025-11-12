@@ -3,29 +3,56 @@ package com.acme.leavemgmt.dao;
 
 import com.acme.leavemgmt.model.SysSetting;
 import com.acme.leavemgmt.util.DBConnection;
+
 import java.sql.*;
 import java.util.*;
 
-/**
- * DAO cho bảng [dbo].[Sys_Settings]
- * - Có cache TTL 60s
- * - Tiện ích get String/Bool/Int
- * - Gom cấu hình Mail thành 1 object
- */
-public class SysSettingDAO {
+public class SysSettingDAO implements AutoCloseable {
 
-    /* ===== Keys thường dùng (tránh gõ sai) ===== */
-    public static final String K_SITE_NAME      = "site_name";
-    public static final String K_MAIL_ENABLED   = "mail_enabled";
-    public static final String K_MAIL_HOST      = "mail_host";
-    public static final String K_MAIL_PORT      = "mail_port";
-    public static final String K_MAIL_USERNAME  = "mail_username";
-    public static final String K_MAIL_PASSWORD  = "mail_password";
-    public static final String K_MAIL_FROM      = "mail_from";      // optional – fallback = username
-    public static final String K_MAIL_FROM_NAME = "mail_fromName";  // optional – fallback = site_name
-    public static final String K_MAIL_STARTTLS  = "mail_starttls";  // optional – default true
+    /* ===== Keys ===== */
+    public static final String K_SITE_NAME         = "site_name";
+    public static final String K_MAIL_ENABLED      = "mail_enabled";
+    public static final String K_MAIL_HOST         = "mail_host";
+    public static final String K_MAIL_PORT         = "mail_port";
+    public static final String K_MAIL_USERNAME     = "mail_username";
+    public static final String K_MAIL_PASSWORD     = "mail_password";
+    public static final String K_MAIL_FROM         = "mail_from";
+    public static final String K_MAIL_FROM_NAME    = "mail_fromName";
+    public static final String K_MAIL_STARTTLS     = "mail_starttls";
 
-    /* ===== Mapping ResultSet -> Model ===== */
+    public static final String K_GOOGLE_ENABLED    = "oauth_google_enabled";
+    public static final String K_GOOGLE_CLIENT_ID  = "google_client_id";
+    public static final String K_GOOGLE_CLIENT_SEC = "google_client_secret";
+    public static final String K_GOOGLE_REDIRECT   = "google_redirect_uri";
+    public static final String K_GOOGLE_ALLOWED_HD = "google_allowed_hd";
+
+    /* ===== State / ctor ===== */
+    private final Connection cn;
+    private final boolean ownsConnection;
+
+    /** Khuyến nghị: dùng kết nối có sẵn */
+    public SysSettingDAO(Connection c) { this.cn = c; this.ownsConnection = false; }
+
+    /** Tiện dụng: tự mở/đóng connection (dùng với try-with-resources) */
+    public SysSettingDAO() throws SQLException { this(DBConnection.getConnection()); }
+
+    /* ===== Cache TTL (static) ===== */
+    private static volatile Map<String, SysSetting> CACHE = Collections.emptyMap();
+    private static volatile long EXPIRES_AT = 0L;
+    private static final long TTL_MS = 60_000L;
+
+    public void invalidateCache() { CACHE = Collections.emptyMap(); EXPIRES_AT = 0L; }
+
+    private Map<String, SysSetting> asMapCached() throws SQLException {
+        long now = System.currentTimeMillis();
+        if (now < EXPIRES_AT && !CACHE.isEmpty()) return CACHE;
+        Map<String, SysSetting> fresh = asMap();
+        CACHE = fresh;
+        EXPIRES_AT = now + TTL_MS;
+        return CACHE;
+    }
+
+    /* ===== Mapping ===== */
     private SysSetting map(ResultSet rs) throws SQLException {
         SysSetting s = new SysSetting();
         s.setId(rs.getInt("id"));
@@ -42,11 +69,10 @@ public class SysSettingDAO {
         return s;
     }
 
-    /* ===== CRUD cơ bản ===== */
+    /* ===== Queries ===== */
     public List<SysSetting> findAllActive() throws SQLException {
-        final String sql = "SELECT * FROM [dbo].[Sys_Settings] WHERE is_active = 1 ORDER BY group_name, setting_key";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql);
+        final String sql = "SELECT * FROM dbo.Sys_Settings WHERE is_active=1 ORDER BY group_name, setting_key";
+        try (PreparedStatement ps = cn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<SysSetting> list = new ArrayList<>();
             while (rs.next()) list.add(map(rs));
@@ -55,15 +81,21 @@ public class SysSettingDAO {
     }
 
     public Map<String, SysSetting> asMap() throws SQLException {
-        Map<String, SysSetting> map = new LinkedHashMap<>();
-        for (SysSetting s : findAllActive()) map.put(s.getSettingKey(), s);
-        return map;
+        final String sql = "SELECT * FROM dbo.Sys_Settings WHERE is_active=1";
+        try (PreparedStatement ps = cn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            Map<String, SysSetting> map = new LinkedHashMap<>();
+            while (rs.next()) {
+                SysSetting s = map(rs);
+                map.put(s.getSettingKey(), s);
+            }
+            return map;
+        }
     }
 
     public SysSetting findByKey(String key) throws SQLException {
-        final String sql = "SELECT * FROM [dbo].[Sys_Settings] WHERE setting_key = ?";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+        final String sql = "SELECT * FROM dbo.Sys_Settings WHERE setting_key=?";
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
@@ -72,9 +104,8 @@ public class SysSettingDAO {
     }
 
     public List<SysSetting> findByGroup(String group) throws SQLException {
-        final String sql = "SELECT * FROM [dbo].[Sys_Settings] WHERE group_name = ? AND is_active=1 ORDER BY setting_key";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+        final String sql = "SELECT * FROM dbo.Sys_Settings WHERE group_name=? AND is_active=1 ORDER BY setting_key";
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
             ps.setString(1, group);
             try (ResultSet rs = ps.executeQuery()) {
                 List<SysSetting> list = new ArrayList<>();
@@ -84,18 +115,16 @@ public class SysSettingDAO {
         }
     }
 
-    /** Upsert một setting (MERGE) */
+    /* ===== Upsert ===== */
     public void upsert(String key, String value, String dataType,
                        String group, String desc, boolean active, Integer updatedBy) throws SQLException {
         final String sql =
-            "MERGE [dbo].[Sys_Settings] AS t " +
-            "USING (SELECT ? AS setting_key) AS s " +
-            "ON (t.setting_key = s.setting_key) " +
+            "MERGE dbo.Sys_Settings AS t " +
+            "USING (SELECT ? AS setting_key) AS s ON (t.setting_key=s.setting_key) " +
             "WHEN MATCHED THEN UPDATE SET setting_value=?, data_type=?, group_name=?, description=?, is_active=?, updated_by=?, updated_at=SYSDATETIME() " +
             "WHEN NOT MATCHED THEN INSERT(setting_key,setting_value,data_type,group_name,description,is_active,updated_by,updated_at) " +
             "VALUES(?,?,?,?,?,?,?,SYSDATETIME());";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
             int i=1;
             ps.setString(i++, key);
             ps.setString(i++, value);
@@ -106,20 +135,19 @@ public class SysSettingDAO {
             if (updatedBy == null) ps.setNull(i++, Types.INTEGER); else ps.setInt(i++, updatedBy);
             ps.executeUpdate();
         }
+        invalidateCache();
     }
 
-    /** Upsert nhiều key trong một transaction. */
-    public void upsertMany(Map<String, String> kv, String group, boolean active, Integer updatedBy) throws SQLException {
+    public void upsertMany(Map<String,String> kv, String group, boolean active, Integer updatedBy) throws SQLException {
         final String sql =
-            "MERGE [dbo].[Sys_Settings] AS t " +
-            "USING (SELECT ? AS setting_key) AS s " +
-            "ON (t.setting_key = s.setting_key) " +
+            "MERGE dbo.Sys_Settings AS t " +
+            "USING (SELECT ? AS setting_key) AS s ON (t.setting_key=s.setting_key) " +
             "WHEN MATCHED THEN UPDATE SET setting_value=?, data_type=?, group_name=?, is_active=?, updated_by=?, updated_at=SYSDATETIME() " +
             "WHEN NOT MATCHED THEN INSERT(setting_key,setting_value,data_type,group_name,is_active,updated_by,updated_at) " +
             "VALUES(?,?,?,?,?,?,SYSDATETIME());";
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            c.setAutoCommit(false);
+        boolean oldAuto = cn.getAutoCommit();
+        cn.setAutoCommit(false);
+        try (PreparedStatement ps = cn.prepareStatement(sql)) {
             for (Map.Entry<String,String> e : kv.entrySet()) {
                 int i=1;
                 ps.setString(i++, e.getKey());
@@ -131,29 +159,21 @@ public class SysSettingDAO {
                 ps.addBatch();
             }
             ps.executeBatch();
-            c.commit();
+            cn.commit();
+        } catch (SQLException ex) {
+            cn.rollback();
+            throw ex;
+        } finally {
+            cn.setAutoCommit(oldAuto);
         }
+        invalidateCache();
     }
 
-    /* ===== Cache TTL đơn giản ===== */
-    private static volatile Map<String, SysSetting> CACHE = Collections.emptyMap();
-    private static volatile long EXPIRES_AT = 0L; // epoch millis
-    private static final long TTL_MS = 60_000;
-
-    public Map<String, SysSetting> asMapCached() throws SQLException {
-        long now = System.currentTimeMillis();
-        if (now < EXPIRES_AT && !CACHE.isEmpty()) return CACHE;
-        Map<String, SysSetting> map = asMap();
-        CACHE = map;
-        EXPIRES_AT = now + TTL_MS;
-        return CACHE;
-    }
-    public void invalidateCache(){ CACHE = Collections.emptyMap(); EXPIRES_AT = 0L; }
-
-    /* ===== tiện ích đọc giá trị theo kiểu ===== */
+    /* ===== Getters (dùng cache) ===== */
     public String get(String key) throws SQLException {
         SysSetting s = asMapCached().get(key);
-        return s == null ? null : (s.getSettingValue() == null ? null : s.getSettingValue().trim());
+        String v = (s == null) ? null : s.getSettingValue();
+        return v == null ? null : v.trim();
     }
     public String get(String key, String defVal) throws SQLException {
         String v = get(key);
@@ -163,7 +183,7 @@ public class SysSettingDAO {
         String v = get(key);
         if (v == null) return defVal;
         v = v.trim();
-        return "1".equals(v) || "true".equalsIgnoreCase(v) || "yes".equalsIgnoreCase(v);
+        return "1".equals(v) || "true".equalsIgnoreCase(v) || "yes".equalsIgnoreCase(v) || "on".equalsIgnoreCase(v);
     }
     public int getInt(String key, int defVal) throws SQLException {
         String v = get(key);
@@ -171,7 +191,7 @@ public class SysSettingDAO {
         catch (Exception e) { return defVal; }
     }
 
-    /* ===== Gom cấu hình Mail thành 1 object ===== */
+    /* ===== Mail & Google config ===== */
     public MailConfig mailConfig() throws SQLException {
         MailConfig m = new MailConfig();
         m.enabled  = getBool(K_MAIL_ENABLED, true);
@@ -184,8 +204,6 @@ public class SysSettingDAO {
         m.starttls = getBool(K_MAIL_STARTTLS, true);
         return m;
     }
-
-    /** POJO cấu hình Mail */
     public static final class MailConfig {
         public boolean enabled;
         public String host;
@@ -195,15 +213,39 @@ public class SysSettingDAO {
         public String from;
         public String fromName;
         public boolean starttls;
-
         @Override public String toString() {
-            return "MailConfig{enabled=" + enabled +
-                    ", host='" + host + '\'' +
-                    ", port=" + port +
-                    ", username='" + username + '\'' +
-                    ", from='" + from + '\'' +
-                    ", fromName='" + fromName + '\'' +
-                    ", starttls=" + starttls + '}';
+            return "MailConfig{enabled="+enabled+", host='"+host+"', port="+port+", username='"+username+
+                   "', from='"+from+"', fromName='"+fromName+"', starttls="+starttls+"}";
+        }
+    }
+
+    public GoogleConfig loadGoogleConfig(String contextPath, String scheme, String host, int port) throws SQLException {
+        GoogleConfig cfg = new GoogleConfig();
+        cfg.enabled      = getBool(K_GOOGLE_ENABLED, false);
+        cfg.clientId     = nv(get(K_GOOGLE_CLIENT_ID));
+        cfg.clientSecret = nv(get(K_GOOGLE_CLIENT_SEC));
+        cfg.redirectUri  = nv(get(K_GOOGLE_REDIRECT));
+        cfg.allowedHd    = nv(get(K_GOOGLE_ALLOWED_HD));
+        if (cfg.redirectUri.isBlank()) {
+            String p = (port==80 || port==443) ? "" : (":" + port);
+            cfg.redirectUri = scheme + "://" + host + p + contextPath + "/oauth/google/callback";
+        }
+        return cfg;
+    }
+    public static final class GoogleConfig {
+        public boolean enabled;
+        public String clientId;
+        public String clientSecret;
+        public String redirectUri;
+        public String allowedHd;
+    }
+
+    private static String nv(String s){ return s==null? "": s; }
+
+    /* ===== AutoCloseable ===== */
+    @Override public void close() {
+        if (ownsConnection) {
+            try { if (cn != null && !cn.isClosed()) cn.close(); } catch (SQLException ignore) {}
         }
     }
 }

@@ -10,9 +10,11 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
+
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -44,22 +46,24 @@ public class ProfileServlet extends HttpServlet {
   private DivisionDAO divisionDAO;
   private RoleDAO roleDAO;
 
-  @Override public void init() {
-    DataSource ds = tryResolveDs();
-    if (ds != null) {
-      userDAO     = new UserDAO(ds);
-      deptDAO     = new DeptDAO(ds);
-      divisionDAO = new DivisionDAO(ds);
-      roleDAO     = new RoleDAO(ds);
-      log("ProfileServlet: Using JNDI DataSource.");
-    } else {
-      userDAO     = new UserDAO();
-      deptDAO     = new DeptDAO();
-      divisionDAO = new DivisionDAO();
-      roleDAO     = new RoleDAO();
-      log("ProfileServlet: JNDI DS not found, fallback to DBConnection.");
-    }
+  // ===== lifecycle =====
+ @Override
+public void init() throws ServletException {
+  DataSource ds = tryResolveDs();
+  if (ds == null) {
+    // Fallback: DataSource “mỏng” dùng DBConnection.getConnection()
+    ds = new com.acme.leavemgmt.util.SimpleDataSource();
   }
+
+  try {
+    userDAO     = new UserDAO(ds);
+    deptDAO     = new DeptDAO(ds);
+    divisionDAO = new DivisionDAO(ds);
+    roleDAO     = new RoleDAO(ds);
+  } catch (Exception e) {
+    throw new ServletException("Init DAOs failed", e);
+  }
+}
 
   // ===== GET =====
   @Override
@@ -69,7 +73,8 @@ public class ProfileServlet extends HttpServlet {
     req.setCharacterEncoding(StandardCharsets.UTF_8.name());
     resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-    User sessionUser = (User) req.getSession().getAttribute("currentUser");
+    HttpSession ses = req.getSession(false);
+    User sessionUser = (ses != null) ? (User) ses.getAttribute("currentUser") : null;
 
     try {
       User me;
@@ -133,7 +138,8 @@ public class ProfileServlet extends HttpServlet {
     req.setCharacterEncoding(StandardCharsets.UTF_8.name());
     resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-    User cu = (User) req.getSession().getAttribute("currentUser");
+    HttpSession ses = req.getSession(false);
+    User cu = (ses != null) ? (User) ses.getAttribute("currentUser") : null;
     if (cu == null) { resp.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
 
     try {
@@ -208,8 +214,10 @@ public class ProfileServlet extends HttpServlet {
   }
   private static <T> List<T> safeList(List<T> l){ return (l==null)?Collections.emptyList():l; }
   private static void moveFlash(HttpServletRequest r, String fromKey, String toAttr){
-    Object v = r.getSession().getAttribute(fromKey);
-    if (v != null){ r.setAttribute(toAttr, v); r.getSession().removeAttribute(fromKey); }
+    HttpSession s = r.getSession(false);
+    if (s == null) return;
+    Object v = s.getAttribute(fromKey);
+    if (v != null){ r.setAttribute(toAttr, v); s.removeAttribute(fromKey); }
   }
   private static void flashOk(HttpServletRequest r, String msg){ r.getSession().setAttribute("flash_ok", msg); }
   private static void flashErr(HttpServletRequest r, String msg){ r.getSession().setAttribute("flash_err", msg); }
